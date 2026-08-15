@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
+    <title>YTTM Role Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="YTTM dashboard home">
+          <img class="brand-logo" src="/toastmasters-logo.jpg" alt="Toastmasters International 로고" />
+          <span><strong>YEONGTONG</strong><small>TOASTMASTERS</small></span>
+        </a>
+        <button id="refreshButton" class="refresh-button" type="button" aria-label="Google Sheet 새로고침">
+          <span aria-hidden="true">↻</span> Refresh
+        </button>
+      </header>
+
+      <nav class="dashboard-tabs" aria-label="대시보드 화면" role="tablist">
+        <button type="button" role="tab" data-dashboard-tab="week" aria-selected="true">이번 주 회의</button>
+        <button type="button" role="tab" data-dashboard-tab="overview" aria-selected="false">개요</button>
+        <button type="button" role="tab" data-dashboard-tab="roles" aria-selected="false">역할 내역</button>
+        <button type="button" role="tab" data-dashboard-tab="speeches" aria-selected="false">스피치 내역</button>
+      </nav>
+
+      <main id="top">
+        <section class="hero" id="overview" data-tab-panel="overview" hidden>
+          <div>
+            <p class="eyebrow">2026 CLUB ACTIVITY</p>
+            <h1>Every role builds<br /><em>a stronger voice.</em></h1>
+            <p class="hero-copy">역할 수행과 스피치 여정을 한눈에 보고, 이번 주 모임을 바로 준비하세요.</p>
+          </div>
+          <div class="hero-meta">
+            <div><span>AS OF</span><strong id="asOfDate">—</strong></div>
+            <div><span>DATA SOURCE</span><strong>LIVE GOOGLE SHEET</strong></div>
+            <a id="sheetLink" target="_blank" rel="noreferrer">Open source ↗</a>
+          </div>
+        </section>
+
+        <div id="statusBanner" class="status-banner" role="status">Google Sheet에서 최신 데이터를 불러오는 중입니다.</div>
+
+        <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
+          <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
+          <article class="metric-card accent-gold"><span>ROLE ASSIGNMENTS</span><strong id="roleCount">—</strong><small>현재까지 수행한 역할</small></article>
+          <article class="metric-card accent-blue"><span>PREPARED SPEECHES</span><strong id="speechCount">—</strong><small>Speaker 1–4 집계</small></article>
+          <article class="metric-card accent-ink"><span>ACTIVE MEMBERS</span><strong id="memberCount">—</strong><small>역할 또는 스피치 참여자</small></article>
+        </section>
+
+        <section class="dashboard-section" id="roles" data-tab-panel="roles" hidden>
+          <div class="section-heading">
+            <div><p class="eyebrow">ROLE HISTORY</p><h2>Role contribution</h2><p>막대에 마우스를 올리면 수행 날짜와 담당자 내역을 볼 수 있습니다.</p></div>
+            <div class="filters">
+              <label>Member<select id="memberFilter"><option value="all">All members</option></select></label>
+              <label>Role<select id="roleFilter"><option value="all">All roles</option></select></label>
+            </div>
+          </div>
+          <div class="two-column">
+            <article class="panel role-panel">
+              <div class="panel-title"><h3>Assignments by role</h3><span id="roleScopeLabel">All members</span></div>
+              <div id="roleChart" class="role-chart"></div>
+            </article>
+            <article class="panel leaderboard-panel">
+              <div class="panel-title"><h3>Member contribution</h3><span>Click a row to filter</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Member</th><th>Roles</th><th>Speeches</th><th>Most frequent</th></tr></thead>
+                  <tbody id="memberTable"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+          <article class="panel history-panel">
+            <div class="panel-title"><h3>Activity details</h3><span id="historyCount">—</span></div>
+            <div id="activityHistory" class="activity-history"></div>
+          </article>
+        </section>
+
+        <section class="dashboard-section dark-section" id="speeches" data-tab-panel="speeches" hidden>
+          <div class="section-heading light">
+            <div><p class="eyebrow">SPEECH JOURNEY</p><h2>Prepared speeches</h2><p>연사별 횟수와 프로젝트·제목·평가자 상세를 확인하세요.</p></div>
+          </div>
+          <div class="speech-layout">
+            <article class="speech-ranking"><div id="speechRanking"></div></article>
+            <article class="speech-timeline" id="speechTimeline"></article>
+          </div>
+        </section>
+
+        <section class="dashboard-section week-section" id="this-week" data-tab-panel="week">
+          <div class="section-heading">
+            <div><p class="eyebrow">NEXT MEETING</p><h2>This week at YTTM</h2><p id="weekSubtitle">가장 가까운 예정 모임을 불러오는 중입니다.</p></div>
+            <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
+          </div>
+          <div id="specialEvent" class="special-event hidden"></div>
+          <div class="week-grid">
+            <article class="panel agenda-panel">
+              <div class="panel-title"><h3>Agenda</h3><span>이번 주 역할표 기준</span></div>
+              <div id="agendaTimeline" class="agenda-timeline"></div>
+            </article>
+            <article class="panel assignments-panel">
+              <div class="panel-title"><h3>Role assignments</h3><span>26_Roles 기준</span></div>
+              <div id="weekAssignments" class="assignment-grid"></div>
+            </article>
+          </div>
+          <article class="panel week-speeches-panel">
+            <div class="panel-title"><h3>Prepared speeches</h3><span>Hover for project details</span></div>
+            <div id="weekSpeeches" class="week-speeches"></div>
+          </article>
+        </section>
+      </main>
+
+      <footer>
+        <div><strong>YTTM</strong><span>Yeongtong Toastmasters · Area 34 · Division D · District 93</span></div>
+        <p id="lastSync">Last synced —</p>
+      </footer>
+    </div>
+    <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
