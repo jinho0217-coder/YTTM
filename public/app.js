@@ -224,6 +224,54 @@ function weeklyAgenda(model, meeting) {
   });
 }
 
+function renderMeetingReadiness(model, meeting) {
+  const requirements = [];
+  ["Theme", "Theme Question", "Word of the day", "Quote of the day"].forEach(label => {
+    requirements.push({ label, complete: Boolean(clean(model.rowsByLabel.get(label)?.row[meeting.col])) });
+  });
+  ROLE_LABELS.filter(role => role !== "Speaker" && role !== "Evaluator").forEach(label => {
+    requirements.push({ label, complete: Boolean(normalizeName(model.rowsByLabel.get(label)?.row[meeting.col])) });
+  });
+  for (let number = 1; number <= 3; number += 1) {
+    requirements.push(
+      { label: `Speaker ${number}`, complete: Boolean(normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col])) },
+      { label: `Title ${number}`, complete: Boolean(clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col])) },
+      { label: `Evaluator ${number}`, complete: Boolean(normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col])) },
+    );
+  }
+  const completed = requirements.filter(item => item.complete).length;
+  const total = requirements.length;
+  const percentage = Math.round(completed / total * 100);
+  const missing = requirements.filter(item => !item.complete).map(item => item.label);
+  const tone = percentage === 100 ? "ready" : percentage >= 70 ? "almost-ready" : "needs-attention";
+  const status = percentage === 100 ? "Ready" : percentage >= 70 ? "Almost ready" : "Needs attention";
+  const container = document.getElementById("meetingReadiness");
+  container.className = `meeting-readiness ${tone}`;
+  setText("readinessStatus", status);
+  setText("readinessScore", `${percentage}% (${completed}/${total})`);
+  const missingElement = document.getElementById("readinessMissing");
+  if (missing.length) {
+    const visibleMissing = missing.slice(0, 3);
+    const remaining = missing.length - visibleMissing.length;
+    missingElement.textContent = `Missing ${missing.length}: ${visibleMissing.join(", ")}${remaining ? ` +${remaining} more` : ""}`;
+    missingElement.title = `Missing: ${missing.join(", ")}`;
+    container.setAttribute("aria-disabled", "false");
+    container.tabIndex = 0;
+    document.getElementById("missingDialogSummary").textContent = `${missing.length} of ${total} required fields still need information.`;
+    document.getElementById("missingDialogList").innerHTML = missing.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+  } else {
+    missingElement.textContent = "All required fields are complete.";
+    missingElement.removeAttribute("title");
+    container.setAttribute("aria-disabled", "true");
+    container.tabIndex = -1;
+    document.getElementById("missingDialogSummary").textContent = "All required fields are complete.";
+    document.getElementById("missingDialogList").innerHTML = "";
+  }
+  const track = container.querySelector(".readiness-track");
+  track.setAttribute("aria-valuenow", String(percentage));
+  document.getElementById("readinessBar").style.width = `${percentage}%`;
+}
+
 function countBy(items, keyFn) {
   return items.reduce((map, item) => map.set(keyFn(item), (map.get(keyFn(item)) || 0) + 1), new Map());
 }
@@ -325,6 +373,15 @@ function renderThisWeek(model) {
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
     setText("meetingTitle", "No Scheduled Meeting");
+    const readiness = document.getElementById("meetingReadiness");
+    readiness.className = "meeting-readiness needs-attention";
+    readiness.setAttribute("aria-disabled", "true");
+    readiness.tabIndex = -1;
+    setText("readinessStatus", "Needs attention");
+    setText("readinessScore", "0% (0/23)");
+    setText("readinessMissing", "No meeting is scheduled.");
+    document.querySelector(".readiness-track").setAttribute("aria-valuenow", "0");
+    document.getElementById("readinessBar").style.width = "0%";
     setText("meetingNumber", "—");
     document.getElementById("specialEvent").classList.add("hidden");
     document.getElementById("meetingContext").innerHTML = `<div class="empty-state">No meeting details are available.</div>`;
@@ -334,6 +391,7 @@ function renderThisWeek(model) {
     return;
   }
   setText("meetingTitle", `${formatMeetingDate(meeting.date)} Meeting`);
+  renderMeetingReadiness(model, meeting);
   setText("meetingNumber", meeting.meetingNo || "—");
   const special = document.getElementById("specialEvent");
   special.textContent = meeting.special ? `Special event · ${meeting.special}` : "";
@@ -432,6 +490,22 @@ async function loadDashboard(force = false) {
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
+const missingDialog = document.getElementById("missingDetailsDialog");
+const readinessCard = document.getElementById("meetingReadiness");
+function openMissingDialog() {
+  if (readinessCard.getAttribute("aria-disabled") !== "true") missingDialog.showModal();
+}
+readinessCard.addEventListener("click", openMissingDialog);
+readinessCard.addEventListener("keydown", event => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    openMissingDialog();
+  }
+});
+document.getElementById("closeMissingDialog").addEventListener("click", () => missingDialog.close());
+missingDialog.addEventListener("click", event => {
+  if (event.target === missingDialog) missingDialog.close();
+});
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
 });

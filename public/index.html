@@ -87,9 +87,19 @@
         </section>
 
         <section class="dashboard-section week-section" id="this-week" data-tab-panel="week">
-          <div class="section-heading">
-            <div><p class="eyebrow" id="meetingEyebrow">YTTM MEETING SCHEDULE</p><h2 id="meetingTitle">Loading meeting date</h2></div>
-            <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
+          <div class="section-heading meeting-heading">
+            <div>
+              <p class="eyebrow" id="meetingEyebrow">YTTM MEETING SCHEDULE</p>
+              <div class="meeting-title-line">
+                <h2 id="meetingTitle">Loading meeting date</h2>
+                <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
+              </div>
+            </div>
+            <div id="meetingReadiness" class="meeting-readiness needs-attention" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open meeting readiness details">
+              <div class="readiness-heading"><span id="readinessStatus">Checking readiness</span><strong id="readinessScore">0% (0/23)</strong></div>
+              <div class="readiness-track" role="progressbar" aria-label="Meeting readiness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="readinessBar"></span></div>
+              <p id="readinessMissing" class="readiness-missing">Checking required fields.</p>
+            </div>
           </div>
           <div id="specialEvent" class="special-event hidden"></div>
           <article class="panel meeting-context-panel">
@@ -118,6 +128,14 @@
         <p id="lastSync">Last synced —</p>
       </footer>
     </div>
+    <dialog id="missingDetailsDialog" class="missing-dialog" aria-labelledby="missingDialogTitle">
+      <div class="missing-dialog-heading">
+        <div><p>MEETING READINESS</p><h2 id="missingDialogTitle">Missing required fields</h2></div>
+        <button type="button" id="closeMissingDialog" class="dialog-close" aria-label="Close missing fields">&times;</button>
+      </div>
+      <p id="missingDialogSummary" class="missing-dialog-summary"></p>
+      <ul id="missingDialogList" class="missing-dialog-list"></ul>
+    </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./app.js" defer></script>
   </body>
