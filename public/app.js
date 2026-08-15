@@ -335,8 +335,10 @@ function renderThisWeek(model) {
   const assignments = [];
   model.rowsByLabel.forEach(({ row }, label) => {
     if (!isRoleRow(label)) return;
+    const role = canonicalRole(label);
+    if (role === "Speaker" || role === "Evaluator") return;
     const member = normalizeName(row[meeting.col]);
-    if (member) assignments.push({ role: canonicalRole(label), member });
+    if (member) assignments.push({ role, member });
   });
   document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   document.getElementById("agendaTimeline").innerHTML = weeklyAgenda(model, meeting).map(item => `<div class="agenda-item"><span class="agenda-time">${escapeHtml(item[0])}</span><span class="agenda-line"></span><div class="agenda-copy"><strong>${escapeHtml(item[1])}</strong><small>${escapeHtml(item[2])}</small></div></div>`).join("");
