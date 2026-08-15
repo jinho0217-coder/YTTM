@@ -1,4 +1,4 @@
-const state = { model: null, member: "all", role: "all" };
+const state = { model: null, member: "all", role: "all", meetingView: "coming" };
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 
@@ -21,15 +21,17 @@ async function fetchPublicSheets() {
 }
 
 function setActiveTab(tabName, updateHash = true) {
-  const validTabs = new Set(["week", "overview", "roles", "speeches"]);
-  const activeTab = validTabs.has(tabName) ? tabName : "week";
+  const validTabs = new Set(["coming", "next"]);
+  const activeTab = validTabs.has(tabName) ? tabName : "coming";
+  state.meetingView = activeTab;
   document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
     button.setAttribute("aria-selected", String(button.dataset.dashboardTab === activeTab));
   });
   document.querySelectorAll("[data-tab-panel]").forEach(panel => {
-    panel.hidden = panel.dataset.tabPanel !== activeTab;
+    panel.hidden = panel.dataset.tabPanel !== "week";
   });
-  if (updateHash) history.replaceState(null, "", activeTab === "week" ? "#this-week" : `#${activeTab}`);
+  if (state.model) renderThisWeek(state.model);
+  if (updateHash) history.replaceState(null, "", activeTab === "coming" ? "#coming-up" : "#next-meeting");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -88,7 +90,7 @@ function todayKst() {
   return new Date(`${map.year}-${map.month}-${map.day}T00:00:00+09:00`);
 }
 function formatDate(date, options = {}) {
-  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", ...options }).format(date);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", ...options }).format(date);
 }
 function canonicalRole(label) {
   const value = clean(label);
@@ -125,7 +127,9 @@ function buildModel(rolesRows, agendaRows) {
     return anchors.filter(label => clean(rowsByLabel.get(label)?.row[c.col])).length >= 3;
   });
   const completedSet = new Set(completedColumns.map(c => c.col));
-  const nextMeeting = columns.find(c => c.date >= today && !c.noMeeting) || columns.at(-1);
+  const upcomingMeetings = columns.filter(c => c.date >= today && !c.noMeeting);
+  const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
+  const followingMeeting = upcomingMeetings[1] || null;
   const assignments = [];
   const speeches = [];
 
@@ -173,7 +177,7 @@ function buildModel(rolesRows, agendaRows) {
   });
 
   return {
-    today, rowsByLabel, columns, completedColumns, completedSet, nextMeeting,
+    today, rowsByLabel, columns, completedColumns, completedSet, comingMeeting, followingMeeting,
     assignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
@@ -309,9 +313,20 @@ function renderSpeeches(model) {
 }
 
 function renderThisWeek(model) {
-  const meeting = model.nextMeeting;
-  if (!meeting) return;
-  setText("weekSubtitle", `${formatDate(meeting.date, { year: "numeric" })} · 가장 가까운 예정 모임`);
+  const isComing = state.meetingView === "coming";
+  const meeting = isComing ? model.comingMeeting : model.followingMeeting;
+  setText("meetingEyebrow", isComing ? "COMING UP MEETING" : "NEXT MEETING");
+  setText("meetingTitle", isComing ? "Coming Up Meeting" : "Next Meeting");
+  if (!meeting) {
+    setText("weekSubtitle", "No later meeting is currently scheduled.");
+    setText("meetingNumber", "—");
+    document.getElementById("specialEvent").classList.add("hidden");
+    document.getElementById("weekAssignments").innerHTML = `<div class="empty-state">No role assignments are available.</div>`;
+    document.getElementById("agendaTimeline").innerHTML = `<div class="empty-state">No agenda is available.</div>`;
+    document.getElementById("weekSpeeches").innerHTML = `<div class="empty-state">No prepared speeches are available.</div>`;
+    return;
+  }
+  setText("weekSubtitle", `${formatDate(meeting.date, { year: "numeric" })} · ${isComing ? "Nearest scheduled meeting" : "Following scheduled meeting"}`);
   setText("meetingNumber", meeting.meetingNo || "—");
   const special = document.getElementById("specialEvent");
   special.textContent = meeting.special ? `Special event · ${meeting.special}` : "";
@@ -323,7 +338,7 @@ function renderThisWeek(model) {
     const member = normalizeName(row[meeting.col]);
     if (member) assignments.push({ role: canonicalRole(label), member });
   });
-  document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">아직 배정된 역할이 없습니다.</div>`;
+  document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   document.getElementById("agendaTimeline").innerHTML = weeklyAgenda(model, meeting).map(item => `<div class="agenda-item"><span class="agenda-time">${escapeHtml(item[0])}</span><span class="agenda-line"></span><div class="agenda-copy"><strong>${escapeHtml(item[1])}</strong><small>${escapeHtml(item[2])}</small></div></div>`).join("");
 
   const weekSpeeches = [];
@@ -339,7 +354,7 @@ function renderThisWeek(model) {
     });
   }
   const weekContainer = document.getElementById("weekSpeeches");
-  weekContainer.innerHTML = weekSpeeches.length ? weekSpeeches.map(s => `<article class="week-speech"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(s.evaluator ? `Evaluator · ${s.evaluator}` : "Evaluator pending")}</p></article>`).join("") : `<div class="empty-state">이번 주 스피치가 아직 등록되지 않았습니다.</div>`;
+  weekContainer.innerHTML = weekSpeeches.length ? weekSpeeches.map(s => `<article class="week-speech"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(s.evaluator ? `Evaluator · ${s.evaluator}` : "Evaluator pending")}</p></article>`).join("") : `<div class="empty-state">No prepared speeches are registered yet.</div>`;
   weekContainer.querySelectorAll(".week-speech").forEach((card, index) => addTooltip(card, `${weekSpeeches[index].speaker} · ${weekSpeeches[index].title}\nProject: ${weekSpeeches[index].project || "—"}\nTime: ${weekSpeeches[index].time || "—"}\nEvaluator: ${weekSpeeches[index].evaluator || "—"}`));
 }
 
@@ -350,7 +365,7 @@ function render(model, meta) {
   setText("speechCount", model.speeches.length);
   setText("memberCount", model.members.length);
   document.getElementById("sheetLink").href = meta.source;
-  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · Google Sheet`);
+  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · Google Sheets`);
   renderFilters(model); renderRoles(model); renderSpeeches(model); renderThisWeek(model);
 }
 
@@ -358,7 +373,7 @@ async function loadDashboard(force = false) {
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
-  banner.className = "status-banner"; banner.textContent = "Google Sheet에서 최신 데이터를 불러오는 중입니다.";
+  banner.className = "status-banner"; banner.textContent = "Loading the latest data from Google Sheets.";
   try {
     const isGitHubPages = location.hostname.endsWith(".github.io");
     let payload;
@@ -372,18 +387,18 @@ async function loadDashboard(force = false) {
     }
     const rolesRows = parseCsv(payload.rolesCsv);
     const agendaRows = parseCsv(payload.agendaCsv);
-    if (rolesRows.length < 10) throw new Error("26_Roles 데이터가 비어 있습니다.");
+    if (rolesRows.length < 10) throw new Error("26_Roles is empty.");
     state.model = buildModel(rolesRows, agendaRows);
     render(state.model, payload);
     banner.className = "status-banner ready";
-    const meeting = state.model.nextMeeting;
+    const meeting = state.model.comingMeeting;
     banner.textContent = meeting
-      ? `${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} 일정을 Google Sheet에서 업데이트했습니다.`
-      : "Google Sheet에서 최신 데이터를 업데이트했습니다.";
+      ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from Google Sheets.`
+      : "Updated the latest data from Google Sheets.";
   } catch (error) {
     console.error(error);
     banner.className = "status-banner error";
-    banner.textContent = `데이터를 불러오지 못했습니다: ${error.message}`;
+    banner.textContent = `Unable to load data: ${error.message}`;
   } finally {
     button.classList.remove("loading"); button.disabled = false;
   }
@@ -395,6 +410,6 @@ document.getElementById("refreshButton").addEventListener("click", () => loadDas
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
 });
-const initialTab = ({ "#overview": "overview", "#roles": "roles", "#speeches": "speeches", "#this-week": "week" })[location.hash] || "week";
+const initialTab = ({ "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 setActiveTab(initialTab, false);
 loadDashboard(false);

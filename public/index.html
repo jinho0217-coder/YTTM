@@ -19,11 +19,9 @@
         </button>
       </header>
 
-      <nav class="dashboard-tabs" aria-label="대시보드 화면" role="tablist">
-        <button type="button" role="tab" data-dashboard-tab="week" aria-selected="true">이번 주 회의</button>
-        <button type="button" role="tab" data-dashboard-tab="overview" aria-selected="false">개요</button>
-        <button type="button" role="tab" data-dashboard-tab="roles" aria-selected="false">역할 내역</button>
-        <button type="button" role="tab" data-dashboard-tab="speeches" aria-selected="false">스피치 내역</button>
+      <nav class="dashboard-tabs" aria-label="Meeting views" role="tablist">
+        <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up Meeting</button>
+        <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next Meeting</button>
       </nav>
 
       <main id="top">
@@ -40,7 +38,7 @@
           </div>
         </section>
 
-        <div id="statusBanner" class="status-banner" role="status">Google Sheet에서 최신 데이터를 불러오는 중입니다.</div>
+        <div id="statusBanner" class="status-banner" role="status">Loading the latest data from Google Sheets.</div>
 
         <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
           <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
@@ -90,24 +88,24 @@
 
         <section class="dashboard-section week-section" id="this-week" data-tab-panel="week">
           <div class="section-heading">
-            <div><p class="eyebrow">NEXT MEETING</p><h2>This week at YTTM</h2><p id="weekSubtitle">가장 가까운 예정 모임을 불러오는 중입니다.</p></div>
+            <div><p class="eyebrow" id="meetingEyebrow">COMING UP MEETING</p><h2 id="meetingTitle">Coming Up Meeting</h2><p id="weekSubtitle">Loading the nearest scheduled meeting.</p></div>
             <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
           </div>
           <div id="specialEvent" class="special-event hidden"></div>
-          <div class="week-grid">
-            <article class="panel agenda-panel">
-              <div class="panel-title"><h3>Agenda</h3><span>이번 주 역할표 기준</span></div>
-              <div id="agendaTimeline" class="agenda-timeline"></div>
-            </article>
+          <div class="week-stack">
             <article class="panel assignments-panel">
-              <div class="panel-title"><h3>Role assignments</h3><span>26_Roles 기준</span></div>
+              <div class="panel-title"><h3>Role assignments</h3><span>From 26_Roles</span></div>
               <div id="weekAssignments" class="assignment-grid"></div>
             </article>
+            <article class="panel week-speeches-panel">
+              <div class="panel-title"><h3>Prepared speeches</h3><span>Hover for project details</span></div>
+              <div id="weekSpeeches" class="week-speeches"></div>
+            </article>
+            <article class="panel agenda-panel">
+              <div class="panel-title"><h3>Agenda</h3><span>Current meeting schedule</span></div>
+              <div id="agendaTimeline" class="agenda-timeline"></div>
+            </article>
           </div>
-          <article class="panel week-speeches-panel">
-            <div class="panel-title"><h3>Prepared speeches</h3><span>Hover for project details</span></div>
-            <div id="weekSpeeches" class="week-speeches"></div>
-          </article>
         </section>
       </main>
 
