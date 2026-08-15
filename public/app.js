@@ -315,7 +315,7 @@ function renderSpeeches(model) {
 function renderThisWeek(model) {
   const isComing = state.meetingView === "coming";
   const meeting = isComing ? model.comingMeeting : model.followingMeeting;
-  setText("meetingEyebrow", isComing ? "COMING UP MEETING" : "NEXT MEETING");
+  setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   setText("meetingTitle", isComing ? "Coming Up Meeting" : "Next Meeting");
   if (!meeting) {
     setText("weekSubtitle", "No later meeting is currently scheduled.");
