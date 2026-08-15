@@ -535,9 +535,12 @@ readinessCard.addEventListener("keydown", event => {
     openMissingDialog();
   }
 });
-document.getElementById("closeMissingDialog").addEventListener("click", () => missingDialog.close());
+document.getElementById("closeMissingDialog").addEventListener("click", event => {
+  event.stopPropagation();
+  missingDialog.close();
+});
 missingDialog.addEventListener("click", event => {
-  if (event.target === missingDialog) missingDialog.close();
+  if (missingDialog.open) missingDialog.close();
 });
 const speechDialog = document.getElementById("speechDetailsDialog");
 document.getElementById("closeSpeechDialog").addEventListener("click", event => {
