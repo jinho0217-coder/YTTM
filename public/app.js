@@ -340,9 +340,9 @@ function renderThisWeek(model) {
     ["Quote of the day", clean(model.rowsByLabel.get("Quote of the day")?.row[meeting.col])],
   ];
   document.getElementById("meetingContext").innerHTML = contextFields.map(([label, value]) => `
-    <div class="meeting-context-item">
+    <div class="meeting-context-item ${value ? "" : "pending"}">
       <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value || "Not set")}</strong>
+      <strong>${escapeHtml(value || "Pending")}</strong>
     </div>`).join("");
 
   const assignments = [];
@@ -351,25 +351,28 @@ function renderThisWeek(model) {
     const role = canonicalRole(label);
     if (role === "Speaker" || role === "Evaluator") return;
     const member = normalizeName(row[meeting.col]);
-    if (member) assignments.push({ role, member });
+    assignments.push({ role, member: member || "Pending", pending: !member });
   });
-  document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
+  document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment ${item.pending ? "pending" : ""}"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   document.getElementById("agendaTimeline").innerHTML = weeklyAgenda(model, meeting).map(item => `<div class="agenda-item"><span class="agenda-time">${escapeHtml(item[0])}</span><span class="agenda-line"></span><div class="agenda-copy"><strong>${escapeHtml(item[1])}</strong><small>${escapeHtml(item[2])}</small></div></div>`).join("");
 
   const weekSpeeches = [];
-  for (let number = 1; number <= 4; number += 1) {
+  for (let number = 1; number <= 3; number += 1) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
-    if (!speaker) continue;
+    const title = clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]);
+    const evaluator = normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]);
     weekSpeeches.push({
-      speaker,
-      title: clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]) || "Title pending",
+      slot: number,
+      speaker: speaker || `Speaker ${number} · Pending`,
+      title: title || "Title Pending",
       project: clean(model.rowsByLabel.get(`Project ${number}`)?.row[meeting.col]),
       time: clean(model.rowsByLabel.get(`Time ${number}`)?.row[meeting.col]),
-      evaluator: normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]),
+      evaluator: evaluator || "Pending",
+      pending: !speaker || !title || !evaluator,
     });
   }
   const weekContainer = document.getElementById("weekSpeeches");
-  weekContainer.innerHTML = weekSpeeches.length ? weekSpeeches.map(s => `<article class="week-speech"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(s.evaluator ? `Evaluator · ${s.evaluator}` : "Evaluator pending")}</p></article>`).join("") : `<div class="empty-state">No prepared speeches are registered yet.</div>`;
+  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(`Evaluator · ${s.evaluator}`)}</p></article>`).join("");
   weekContainer.querySelectorAll(".week-speech").forEach((card, index) => addTooltip(card, `${weekSpeeches[index].speaker} · ${weekSpeeches[index].title}\nProject: ${weekSpeeches[index].project || "—"}\nTime: ${weekSpeeches[index].time || "—"}\nEvaluator: ${weekSpeeches[index].evaluator || "—"}`));
 }
 
