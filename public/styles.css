@@ -159,7 +159,7 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .speech-card h4 { margin: 8px 0 6px; font-family: Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.1; }
 .speech-card p { margin: 0; color: #edc15e; font-size: 11px; }
 
-.week-section { padding-top: 58px; padding-bottom: 100px; touch-action: pan-y; }
+.week-section { padding-top: 58px; padding-bottom: 100px; touch-action: pan-y; will-change: transform, opacity; }
 .meeting-heading { align-items: flex-start; }
 .meeting-title-line { display: flex; align-items: center; gap: 18px; }
 .meeting-number { flex: 0 0 auto; min-width: 84px; padding: 9px 14px 8px; background: #e9e2d8; border-radius: 8px; text-align: center; }

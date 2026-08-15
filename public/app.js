@@ -540,12 +540,65 @@ document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
 });
 let swipeStart = null;
 let suppressSwipeClickUntil = 0;
+let swipeAnimating = false;
+const meetingPanel = document.getElementById("this-week");
+
+function resetMeetingSwipe(animated = true) {
+  meetingPanel.style.transition = animated ? "transform 180ms ease-out, opacity 180ms ease-out" : "none";
+  meetingPanel.style.transform = "translate3d(0, 0, 0)";
+  meetingPanel.style.opacity = "1";
+}
+
+function completeMeetingSwipe(target, deltaX) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setActiveTab(target, true, false);
+    resetMeetingSwipe(false);
+    return;
+  }
+  swipeAnimating = true;
+  const direction = Math.sign(deltaX);
+  meetingPanel.style.transition = "transform 190ms ease-in, opacity 190ms ease-in";
+  meetingPanel.style.transform = `translate3d(${direction * window.innerWidth}px, 0, 0)`;
+  meetingPanel.style.opacity = "0.35";
+  window.setTimeout(() => {
+    setActiveTab(target, true, false);
+    meetingPanel.style.transition = "none";
+    meetingPanel.style.transform = `translate3d(${-direction * window.innerWidth}px, 0, 0)`;
+    meetingPanel.style.opacity = "0.35";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      meetingPanel.style.transition = "transform 230ms cubic-bezier(.22,.72,.25,1), opacity 230ms ease-out";
+      meetingPanel.style.transform = "translate3d(0, 0, 0)";
+      meetingPanel.style.opacity = "1";
+      window.setTimeout(() => {
+        meetingPanel.style.transition = "";
+        meetingPanel.style.transform = "";
+        meetingPanel.style.opacity = "";
+        swipeAnimating = false;
+      }, 240);
+    }));
+  }, 195);
+}
+
 document.addEventListener("touchstart", event => {
-  if (event.touches.length !== 1) return;
+  if (swipeAnimating || event.touches.length !== 1) return;
   if (document.querySelector("dialog[open]") || event.target.closest(".topbar, .dashboard-tabs, dialog")) return;
   const touch = event.touches[0];
   swipeStart = { x: touch.clientX, y: touch.clientY };
+  resetMeetingSwipe(false);
 }, { passive: true });
+document.addEventListener("touchmove", event => {
+  if (!swipeStart || event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  const deltaX = touch.clientX - swipeStart.x;
+  const deltaY = touch.clientY - swipeStart.y;
+  if (Math.abs(deltaX) <= 8 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+  event.preventDefault();
+  const atBoundary = (deltaX < 0 && state.meetingView === "next") || (deltaX > 0 && state.meetingView === "coming");
+  const visualX = atBoundary ? deltaX * 0.18 : deltaX;
+  meetingPanel.style.transition = "none";
+  meetingPanel.style.transform = `translate3d(${visualX}px, 0, 0)`;
+  meetingPanel.style.opacity = String(Math.max(0.72, 1 - Math.abs(visualX) / window.innerWidth * 0.28));
+}, { passive: false });
 document.addEventListener("touchend", event => {
   if (!swipeStart || event.changedTouches.length !== 1) return;
   const touch = event.changedTouches[0];
@@ -553,12 +606,16 @@ document.addEventListener("touchend", event => {
   const deltaY = touch.clientY - swipeStart.y;
   swipeStart = null;
   const threshold = Math.min(56, window.innerWidth * 0.14);
-  if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+  if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) {
+    resetMeetingSwipe(true);
+    return;
+  }
   suppressSwipeClickUntil = Date.now() + 450;
-  if (deltaX < 0 && state.meetingView === "coming") setActiveTab("next", true, false);
-  if (deltaX > 0 && state.meetingView === "next") setActiveTab("coming", true, false);
+  if (deltaX < 0 && state.meetingView === "coming") completeMeetingSwipe("next", deltaX);
+  else if (deltaX > 0 && state.meetingView === "next") completeMeetingSwipe("coming", deltaX);
+  else resetMeetingSwipe(true);
 }, { passive: true });
-document.addEventListener("touchcancel", () => { swipeStart = null; }, { passive: true });
+document.addEventListener("touchcancel", () => { swipeStart = null; resetMeetingSwipe(true); }, { passive: true });
 document.addEventListener("click", event => {
   if (Date.now() < suppressSwipeClickUntil) {
     event.preventDefault();
