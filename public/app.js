@@ -357,8 +357,9 @@ function renderThisWeek(model) {
   document.getElementById("agendaTimeline").innerHTML = weeklyAgenda(model, meeting).map(item => `<div class="agenda-item"><span class="agenda-time">${escapeHtml(item[0])}</span><span class="agenda-line"></span><div class="agenda-copy"><strong>${escapeHtml(item[1])}</strong><small>${escapeHtml(item[2])}</small></div></div>`).join("");
 
   const weekSpeeches = [];
-  for (let number = 1; number <= 3; number += 1) {
+  for (let number = 1; number <= 4; number += 1) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
+    if (number === 4 && !speaker) continue;
     const title = clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]);
     const evaluator = normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]);
     weekSpeeches.push({
