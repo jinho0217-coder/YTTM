@@ -10,6 +10,10 @@ Node.js 18 이상이 설치된 환경에서 다음 명령을 실행합니다.
 npm start
 ```
 
+## GitHub Pages
+
+`main` 브랜치에 푸시하면 GitHub Actions가 Google Sheet 데이터를 가져와 GitHub Pages에 배포합니다. 배포는 매시간 자동 갱신되며 Actions 화면에서 수동 실행할 수도 있습니다.
+
 그다음 브라우저에서 [http://127.0.0.1:4173](http://127.0.0.1:4173)을 엽니다.
 
 ## 데이터 갱신

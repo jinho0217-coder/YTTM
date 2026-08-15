@@ -340,7 +340,10 @@ async function loadDashboard(force = false) {
   button.classList.add("loading"); button.disabled = true;
   banner.className = "status-banner"; banner.textContent = "Google Sheet에서 최신 데이터를 불러오는 중입니다.";
   try {
-    const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
+    const isGitHubPages = location.hostname.endsWith(".github.io");
+    const endpoint = isGitHubPages
+      ? `./data/sheets.json${force ? `?refresh=${Date.now()}` : ""}`
+      : (force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets");
     const response = await fetch(endpoint, { cache: "no-store" });
     if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
     const payload = await response.json();
