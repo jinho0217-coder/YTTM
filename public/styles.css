@@ -243,6 +243,9 @@ footer strong { color: var(--white); font-family: Georgia, serif; font-size: 22p
 footer p { text-align: right; }
 .tooltip { position: fixed; z-index: 100; max-width: 330px; padding: 13px 15px; color: var(--white); background: rgba(12,22,27,.97); border: 1px solid rgba(255,255,255,.15); box-shadow: 0 14px 40px rgba(0,0,0,.25); pointer-events: none; opacity: 0; transform: translateY(6px); transition: opacity .12s, transform .12s; font-size: 11px; white-space: pre-line; }
 .tooltip.visible { opacity: 1; transform: translateY(0); }
+@media (hover: none), (pointer: coarse) {
+  .tooltip, .tooltip.visible { display: none !important; opacity: 0 !important; }
+}
 
 @media (max-width: 900px) {
   .hero { grid-template-columns: 1fr; min-height: 560px; }

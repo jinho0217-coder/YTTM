@@ -286,11 +286,13 @@ function tooltipText(items) {
 }
 function addTooltip(element, content) {
   element.dataset.tooltip = content;
-  element.addEventListener("mouseenter", showTooltip);
-  element.addEventListener("mousemove", moveTooltip);
-  element.addEventListener("mouseleave", hideTooltip);
-  element.addEventListener("focus", showTooltip);
-  element.addEventListener("blur", hideTooltip);
+  if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    element.addEventListener("mouseenter", showTooltip);
+    element.addEventListener("mousemove", moveTooltip);
+    element.addEventListener("mouseleave", hideTooltip);
+    element.addEventListener("focus", showTooltip);
+    element.addEventListener("blur", hideTooltip);
+  }
   element.tabIndex = 0;
 }
 function showTooltip(event) {
@@ -304,7 +306,13 @@ function moveTooltip(event) {
   const y = Math.min((event.clientY || 20) + 14, window.innerHeight - tooltip.offsetHeight - 12);
   tooltip.style.left = `${Math.max(8, x)}px`; tooltip.style.top = `${Math.max(8, y)}px`;
 }
-function hideTooltip() { document.getElementById("tooltip").classList.remove("visible"); }
+function hideTooltip() {
+  const tooltip = document.getElementById("tooltip");
+  tooltip.classList.remove("visible");
+  tooltip.setAttribute("aria-hidden", "true");
+  tooltip.style.left = "";
+  tooltip.style.top = "";
+}
 
 function renderFilters(model) {
   const memberSelect = document.getElementById("memberFilter");
@@ -455,6 +463,7 @@ function renderThisWeek(model) {
 }
 
 function showSpeechDetails(speech) {
+  hideTooltip();
   setText("speechDialogTitle", speech.title || "Title Pending");
   document.getElementById("speechDialogDetails").innerHTML = [
     ["Speaker", speech.speaker],
@@ -531,10 +540,14 @@ missingDialog.addEventListener("click", event => {
   if (event.target === missingDialog) missingDialog.close();
 });
 const speechDialog = document.getElementById("speechDetailsDialog");
-document.getElementById("closeSpeechDialog").addEventListener("click", () => speechDialog.close());
-speechDialog.addEventListener("click", event => {
-  if (event.target === speechDialog) speechDialog.close();
+document.getElementById("closeSpeechDialog").addEventListener("click", event => {
+  event.stopPropagation();
+  speechDialog.close();
 });
+speechDialog.addEventListener("click", event => {
+  if (speechDialog.open) speechDialog.close();
+});
+speechDialog.addEventListener("close", hideTooltip);
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
 });
