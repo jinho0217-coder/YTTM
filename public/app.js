@@ -92,6 +92,9 @@ function todayKst() {
 function formatDate(date, options = {}) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", ...options }).format(date);
 }
+function formatMeetingDate(date) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric" }).format(date);
+}
 function canonicalRole(label) {
   const value = clean(label);
   if (/^Speaker \d+$/i.test(value)) return "Speaker";
@@ -196,14 +199,18 @@ function extractAgenda(rows) {
 
 function weeklyAgenda(model, meeting) {
   const memberFor = label => normalizeName(model.rowsByLabel.get(label)?.row[meeting.col]);
-  const speakerCount = [1, 2, 3, 4]
-    .filter(number => normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col])).length;
+  const speakerNames = [1, 2, 3, 4]
+    .map(number => normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]))
+    .filter(Boolean);
+  const speakerSummary = speakerNames.length
+    ? `${speakerNames.length} speaker${speakerNames.length === 1 ? "" : "s"} (${speakerNames.join(", ")})`
+    : "Speakers pending";
   const details = new Map([
     ["Introduction", ["Chairperson", memberFor("Chairperson")]],
     ["Toastmaster's Session", ["Toastmaster", memberFor("Toastmaster")]],
-    ["Prepared Speech Session", [speakerCount ? `${speakerCount} speakers` : "Speakers", ""]],
-    ["Q & A Session to speakers", ["Questions to speakers", ""]],
-    ["Q & A Session", ["Questions to speakers", ""]],
+    ["Prepared Speech Session", [speakerSummary, ""]],
+    ["Q & A Session to speakers", [speakerNames.length ? `Questions to ${speakerNames.join(", ")}` : "Questions to speakers", ""]],
+    ["Q & A Session", [speakerNames.length ? `Questions to ${speakerNames.join(", ")}` : "Questions to speakers", ""]],
     ["Table Topics", ["Table Topic Master", memberFor("Table Topic Master")]],
     ["Evaluation Session", ["General Evaluator", memberFor("General Evaluator")]],
     ["Announcement Session", ["Toastmaster", memberFor("Toastmaster")]],
@@ -316,9 +323,8 @@ function renderThisWeek(model) {
   const isComing = state.meetingView === "coming";
   const meeting = isComing ? model.comingMeeting : model.followingMeeting;
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
-  setText("meetingTitle", isComing ? "Coming Up Meeting" : "Next Meeting");
   if (!meeting) {
-    setText("weekSubtitle", "No later meeting is currently scheduled.");
+    setText("meetingTitle", "No Scheduled Meeting");
     setText("meetingNumber", "—");
     document.getElementById("specialEvent").classList.add("hidden");
     document.getElementById("meetingContext").innerHTML = `<div class="empty-state">No meeting details are available.</div>`;
@@ -327,7 +333,7 @@ function renderThisWeek(model) {
     document.getElementById("weekSpeeches").innerHTML = `<div class="empty-state">No prepared speeches are available.</div>`;
     return;
   }
-  setText("weekSubtitle", `${formatDate(meeting.date, { year: "numeric" })} · ${isComing ? "Nearest scheduled meeting" : "Following scheduled meeting"}`);
+  setText("meetingTitle", `${formatMeetingDate(meeting.date)} Meeting`);
   setText("meetingNumber", meeting.meetingNo || "—");
   const special = document.getElementById("specialEvent");
   special.textContent = meeting.special ? `Special event · ${meeting.special}` : "";
