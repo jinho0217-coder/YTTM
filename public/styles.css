@@ -229,7 +229,8 @@ footer p { text-align: right; }
   .filters select { width: 100%; min-width: 0; }
   .bar-row { grid-template-columns: 115px 1fr 25px; }
   .leaderboard-panel { min-width: 0; }
-  .speech-timeline, .week-speeches, .assignment-grid { grid-template-columns: 1fr; }
+  .speech-timeline, .week-speeches { grid-template-columns: 1fr; }
+  .assignment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   .panel-title { gap: 12px; padding: 17px 16px; }
   .panel-title h3 { font-size: 18px; }
   .panel-title span { text-align: right; }
@@ -240,7 +241,7 @@ footer p { text-align: right; }
   .agenda-copy small { font-size: 13px; }
   .assignment-grid, .week-speeches { padding: 14px; }
   .assignment { min-height: 86px; padding: 14px 16px; }
-  .assignment span { font-size: 14px; }
+  .assignment span { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
   .assignment strong { font-size: 21px; }
   .week-speech { min-height: 132px; padding: 19px; }
   .week-speech .speaker { font-size: 16px; }
