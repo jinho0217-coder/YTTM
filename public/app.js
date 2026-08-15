@@ -541,11 +541,18 @@ document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
 const meetingPanel = document.getElementById("this-week");
 let swipeStart = null;
 meetingPanel.addEventListener("touchstart", event => {
-  if (!window.matchMedia("(max-width: 620px)").matches || event.touches.length !== 1) return;
-  if (event.target.closest("button, a, input, select, textarea, dialog, .meeting-readiness, .week-speech")) return;
+  if (event.touches.length !== 1) return;
+  if (event.target.closest("button, a, input, select, textarea, dialog")) return;
   const touch = event.touches[0];
   swipeStart = { x: touch.clientX, y: touch.clientY };
 }, { passive: true });
+meetingPanel.addEventListener("touchmove", event => {
+  if (!swipeStart || event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  const deltaX = touch.clientX - swipeStart.x;
+  const deltaY = touch.clientY - swipeStart.y;
+  if (Math.abs(deltaX) > 12 && Math.abs(deltaX) > Math.abs(deltaY)) event.preventDefault();
+}, { passive: false });
 meetingPanel.addEventListener("touchend", event => {
   if (!swipeStart || event.changedTouches.length !== 1) return;
   const touch = event.changedTouches[0];
@@ -554,9 +561,10 @@ meetingPanel.addEventListener("touchend", event => {
   swipeStart = null;
   const threshold = Math.min(72, window.innerWidth * 0.18);
   if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.35) return;
+  event.preventDefault();
   if (deltaX < 0 && state.meetingView === "coming") setActiveTab("next", true, false);
   if (deltaX > 0 && state.meetingView === "next") setActiveTab("coming", true, false);
-}, { passive: true });
+}, { passive: false });
 meetingPanel.addEventListener("touchcancel", () => { swipeStart = null; }, { passive: true });
 const initialTab = ({ "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 setActiveTab(initialTab, false);
