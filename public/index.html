@@ -136,6 +136,13 @@
       <p id="missingDialogSummary" class="missing-dialog-summary"></p>
       <ul id="missingDialogList" class="missing-dialog-list"></ul>
     </dialog>
+    <dialog id="speechDetailsDialog" class="speech-dialog" aria-labelledby="speechDialogTitle">
+      <div class="missing-dialog-heading">
+        <div><p>PREPARED SPEECH</p><h2 id="speechDialogTitle">Speech details</h2></div>
+        <button type="button" id="closeSpeechDialog" class="dialog-close" aria-label="Close speech details">&times;</button>
+      </div>
+      <div id="speechDialogDetails" class="speech-dialog-details"></div>
+    </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./app.js" defer></script>
   </body>

@@ -437,8 +437,30 @@ function renderThisWeek(model) {
     });
   }
   const weekContainer = document.getElementById("weekSpeeches");
-  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(`Evaluator · ${s.evaluator}`)}</p></article>`).join("");
-  weekContainer.querySelectorAll(".week-speech").forEach((card, index) => addTooltip(card, `${weekSpeeches[index].speaker} · ${weekSpeeches[index].title}\nProject: ${weekSpeeches[index].project || "—"}\nTime: ${weekSpeeches[index].time || "—"}\nEvaluator: ${weekSpeeches[index].evaluator || "—"}`));
+  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open speech details for ${escapeHtml(s.speaker)}"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(`Evaluator · ${s.evaluator}`)}</p></article>`).join("");
+  weekContainer.querySelectorAll(".week-speech").forEach((card, index) => {
+    const speech = weekSpeeches[index];
+    addTooltip(card, `${speech.speaker} · ${speech.title}\nProject: ${speech.project || "—"}\nTime: ${speech.time || "—"}\nEvaluator: ${speech.evaluator || "—"}`);
+    const openDetails = () => showSpeechDetails(speech);
+    card.addEventListener("click", openDetails);
+    card.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openDetails();
+      }
+    });
+  });
+}
+
+function showSpeechDetails(speech) {
+  setText("speechDialogTitle", speech.title || "Title Pending");
+  document.getElementById("speechDialogDetails").innerHTML = [
+    ["Speaker", speech.speaker],
+    ["Project", speech.project || "Pending"],
+    ["Time", speech.time || "Pending"],
+    ["Evaluator", speech.evaluator || "Pending"],
+  ].map(([label, value]) => `<div class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  document.getElementById("speechDetailsDialog").showModal();
 }
 
 function render(model, meta) {
@@ -505,6 +527,11 @@ readinessCard.addEventListener("keydown", event => {
 document.getElementById("closeMissingDialog").addEventListener("click", () => missingDialog.close());
 missingDialog.addEventListener("click", event => {
   if (event.target === missingDialog) missingDialog.close();
+});
+const speechDialog = document.getElementById("speechDetailsDialog");
+document.getElementById("closeSpeechDialog").addEventListener("click", () => speechDialog.close());
+speechDialog.addEventListener("click", event => {
+  if (event.target === speechDialog) speechDialog.close();
 });
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));

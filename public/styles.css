@@ -188,6 +188,18 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .missing-dialog-summary { margin: 0; padding: 18px 26px 0; color: var(--muted); font-size: 13px; }
 .missing-dialog-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 0; padding: 18px 26px 26px; list-style: none; }
 .missing-dialog-list li { padding: 12px 14px; background: #fff0f1; border-left: 4px solid var(--red-bright); font-size: 13px; font-weight: 700; }
+.speech-dialog { width: min(600px, calc(100% - 32px)); padding: 0; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(17,31,37,.28); }
+.speech-dialog::backdrop { background: rgba(17,31,37,.48); backdrop-filter: blur(2px); }
+.speech-dialog-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.speech-detail-item { min-height: 105px; padding: 20px 24px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.speech-detail-item:nth-child(2n) { border-right: 0; }
+.speech-detail-item:nth-last-child(-n+2) { border-bottom: 0; }
+.speech-detail-item span { display: block; color: var(--red); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.speech-detail-item strong { display: block; margin-top: 10px; font-family: Georgia, serif; font-size: 20px; font-weight: 500; line-height: 1.35; }
+.speech-detail-item.pending { background: #fff0f1; box-shadow: inset 4px 0 0 var(--red-bright); }
+.week-speech[role="button"] { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.week-speech[role="button"]:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(20,30,34,.12); }
+.week-speech[role="button"]:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
 .special-event { margin: -12px 0 24px; padding: 12px 16px; color: #5d4212; background: #f0d999; border-left: 4px solid var(--gold); font-size: 13px; }
 .hidden { display: none !important; }
 .meeting-context-panel { margin-bottom: 18px; }
@@ -275,6 +287,10 @@ footer p { text-align: right; }
   .missing-dialog-heading h2 { font-size: 25px; }
   .missing-dialog-summary { padding: 16px 18px 0; }
   .missing-dialog-list { grid-template-columns: 1fr; padding: 16px 18px 20px; }
+  .speech-dialog-details { grid-template-columns: 1fr; }
+  .speech-detail-item { min-height: 0; padding: 17px 18px; border-right: 0; }
+  .speech-detail-item:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .speech-detail-item:last-child { border-bottom: 0; }
   .meeting-context-grid { grid-template-columns: 1fr; }
   .meeting-context-item { min-height: 0; padding: 17px 16px; border-right: 0; }
   .meeting-context-item:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); }
