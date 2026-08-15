@@ -272,6 +272,7 @@ footer p { text-align: right; }
   .metric-card strong { font-size: 40px; }
   .dashboard-section { width: calc(100% - 24px); padding-top: 56px; }
   .week-section { padding-top: 38px; padding-bottom: 62px; }
+  .week-section { touch-action: pan-y; }
   .dark-section { width: 100%; padding-left: 18px; padding-right: 18px; }
   .section-heading { align-items: stretch; flex-direction: column; }
   .section-heading { gap: 18px; margin-bottom: 24px; }

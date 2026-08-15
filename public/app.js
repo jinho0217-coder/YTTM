@@ -20,7 +20,7 @@ async function fetchPublicSheets() {
   };
 }
 
-function setActiveTab(tabName, updateHash = true) {
+function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
   const validTabs = new Set(["coming", "next"]);
   const activeTab = validTabs.has(tabName) ? tabName : "coming";
   state.meetingView = activeTab;
@@ -32,7 +32,7 @@ function setActiveTab(tabName, updateHash = true) {
   });
   if (state.model) renderThisWeek(state.model);
   if (updateHash) history.replaceState(null, "", activeTab === "coming" ? "#coming-up" : "#next-meeting");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (scrollToTop) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 const ROLE_LABELS = [
@@ -538,6 +538,26 @@ speechDialog.addEventListener("click", event => {
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
 });
+const meetingPanel = document.getElementById("this-week");
+let swipeStart = null;
+meetingPanel.addEventListener("touchstart", event => {
+  if (!window.matchMedia("(max-width: 620px)").matches || event.touches.length !== 1) return;
+  if (event.target.closest("button, a, input, select, textarea, dialog, .meeting-readiness, .week-speech")) return;
+  const touch = event.touches[0];
+  swipeStart = { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+meetingPanel.addEventListener("touchend", event => {
+  if (!swipeStart || event.changedTouches.length !== 1) return;
+  const touch = event.changedTouches[0];
+  const deltaX = touch.clientX - swipeStart.x;
+  const deltaY = touch.clientY - swipeStart.y;
+  swipeStart = null;
+  const threshold = Math.min(72, window.innerWidth * 0.18);
+  if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.35) return;
+  if (deltaX < 0 && state.meetingView === "coming") setActiveTab("next", true, false);
+  if (deltaX > 0 && state.meetingView === "next") setActiveTab("coming", true, false);
+}, { passive: true });
+meetingPanel.addEventListener("touchcancel", () => { swipeStart = null; }, { passive: true });
 const initialTab = ({ "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 setActiveTab(initialTab, false);
 loadDashboard(false);
