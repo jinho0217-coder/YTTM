@@ -233,8 +233,10 @@ function renderMeetingReadiness(model, meeting) {
     requirements.push({ label, complete: Boolean(normalizeName(model.rowsByLabel.get(label)?.row[meeting.col])) });
   });
   for (let number = 1; number <= 3; number += 1) {
+    const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
+    if (number > 1 && !speaker) continue;
     requirements.push(
-      { label: `Speaker ${number}`, complete: Boolean(normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col])) },
+      { label: `Speaker ${number}`, complete: Boolean(speaker) },
       { label: `Title ${number}`, complete: Boolean(clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col])) },
       { label: `Evaluator ${number}`, complete: Boolean(normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col])) },
     );
@@ -423,7 +425,7 @@ function renderThisWeek(model) {
   const weekSpeeches = [];
   for (let number = 1; number <= 4; number += 1) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
-    if (number === 4 && !speaker) continue;
+    if (number > 1 && !speaker) continue;
     const title = clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]);
     const evaluator = normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]);
     weekSpeeches.push({
