@@ -321,6 +321,7 @@ function renderThisWeek(model) {
     setText("weekSubtitle", "No later meeting is currently scheduled.");
     setText("meetingNumber", "—");
     document.getElementById("specialEvent").classList.add("hidden");
+    document.getElementById("meetingContext").innerHTML = `<div class="empty-state">No meeting details are available.</div>`;
     document.getElementById("weekAssignments").innerHTML = `<div class="empty-state">No role assignments are available.</div>`;
     document.getElementById("agendaTimeline").innerHTML = `<div class="empty-state">No agenda is available.</div>`;
     document.getElementById("weekSpeeches").innerHTML = `<div class="empty-state">No prepared speeches are available.</div>`;
@@ -331,6 +332,18 @@ function renderThisWeek(model) {
   const special = document.getElementById("specialEvent");
   special.textContent = meeting.special ? `Special event · ${meeting.special}` : "";
   special.classList.toggle("hidden", !meeting.special);
+
+  const contextFields = [
+    ["Theme", clean(model.rowsByLabel.get("Theme")?.row[meeting.col])],
+    ["Theme Question", clean(model.rowsByLabel.get("Theme Question")?.row[meeting.col])],
+    ["Word of the day", clean(model.rowsByLabel.get("Word of the day")?.row[meeting.col])],
+    ["Quote of the day", clean(model.rowsByLabel.get("Quote of the day")?.row[meeting.col])],
+  ];
+  document.getElementById("meetingContext").innerHTML = contextFields.map(([label, value]) => `
+    <div class="meeting-context-item">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || "Not set")}</strong>
+    </div>`).join("");
 
   const assignments = [];
   model.rowsByLabel.forEach(({ row }, label) => {
