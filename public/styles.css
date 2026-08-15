@@ -22,10 +22,12 @@ body {
 }
 button, select { font: inherit; }
 a { color: inherit; }
-.page-shell { min-height: 100vh; overflow: hidden; }
+.page-shell { min-height: 100vh; padding-top: 76px; overflow-x: clip; }
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 20;
   height: 76px;
   display: flex;
@@ -214,6 +216,7 @@ footer p { text-align: right; }
   .speech-timeline { max-height: none; }
 }
 @media (max-width: 620px) {
+  .page-shell { padding-top: 66px; }
   .topbar { height: 66px; padding: 0 16px; }
   .brand { gap: 9px; }
   .brand-logo { width: 42px; height: 42px; padding: 2px; }
