@@ -1,4 +1,24 @@
 const state = { model: null, member: "all", role: "all" };
+const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
+const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
+
+async function fetchPublicSheets() {
+  const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`;
+  const stamp = Date.now();
+  const [rolesResponse, agendaResponse] = await Promise.all([
+    fetch(`${base}?gid=1852116681&tqx=out%3Acsv&_=${stamp}`, { cache: "no-store" }),
+    fetch(`${base}?sheet=26_Agenda&tqx=out%3Acsv&_=${stamp}`, { cache: "no-store" }),
+  ]);
+  if (!rolesResponse.ok || !agendaResponse.ok) {
+    throw new Error(`Google Sheets returned ${rolesResponse.status}/${agendaResponse.status}`);
+  }
+  return {
+    rolesCsv: await rolesResponse.text(),
+    agendaCsv: await agendaResponse.text(),
+    fetchedAt: new Date().toISOString(),
+    source: SHEET_SOURCE,
+  };
+}
 
 function setActiveTab(tabName, updateHash = true) {
   const validTabs = new Set(["week", "overview", "roles", "speeches"]);
@@ -341,12 +361,15 @@ async function loadDashboard(force = false) {
   banner.className = "status-banner"; banner.textContent = "Google Sheet에서 최신 데이터를 불러오는 중입니다.";
   try {
     const isGitHubPages = location.hostname.endsWith(".github.io");
-    const endpoint = isGitHubPages
-      ? `./data/sheets.json${force ? `?refresh=${Date.now()}` : ""}`
-      : (force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets");
-    const response = await fetch(endpoint, { cache: "no-store" });
-    if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
-    const payload = await response.json();
+    let payload;
+    if (isGitHubPages) {
+      payload = await fetchPublicSheets();
+    } else {
+      const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
+      payload = await response.json();
+    }
     const rolesRows = parseCsv(payload.rolesCsv);
     const agendaRows = parseCsv(payload.agendaCsv);
     if (rolesRows.length < 10) throw new Error("26_Roles 데이터가 비어 있습니다.");
