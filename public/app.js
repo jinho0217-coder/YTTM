@@ -224,9 +224,9 @@ function detailedAgenda(model, meeting) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
     if (number > 1 && !speaker) continue;
     speeches.push([
+      speaker || "Pending",
       clean(model.rowsByLabel.get(`Project ${number}`)?.row[meeting.col]) || "Pending",
       clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]) || "Pending",
-      speaker || "Pending",
       clean(model.rowsByLabel.get(`Time ${number}`)?.row[meeting.col]) || "Pending",
       normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]) || "Pending",
     ]);
@@ -252,7 +252,7 @@ function detailedAgenda(model, meeting) {
     },
     {
       time: "10:20", title: "Prepared Speech Session", owner: memberFor("Toastmaster"),
-      table: { headers: ["Project", "Speech Title", "Speaker", "Time", "Evaluator"], rows: speeches },
+      table: { headers: ["Speaker", "Project", "Speech Title", "Time", "Evaluator"], rows: speeches },
       note: "1 min silence after each speech",
     },
     {
