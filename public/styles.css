@@ -362,7 +362,9 @@ footer p { text-align: right; }
 .tooltip.visible { opacity: 1; transform: translateY(0); }
 @media (hover: none), (pointer: coarse) {
   .tooltip, .tooltip.visible { display: none !important; opacity: 0 !important; }
-  .meeting-context-item, .assignment, .week-speech { -webkit-touch-callout: none; user-select: none; }
+  .meeting-context-item, .assignment, .week-speech { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .meeting-edit-dialog, .meeting-edit-dialog button, .meeting-edit-dialog label, .meeting-edit-dialog span, .meeting-edit-dialog p, .meeting-edit-dialog h2 { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .meeting-edit-dialog input { -webkit-user-select: text; user-select: text; }
 }
 
 @media (max-width: 900px) {

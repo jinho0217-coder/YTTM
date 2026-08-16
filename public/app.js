@@ -522,33 +522,45 @@ function showThemeDetails(label, value) {
 let suppressLongPressClickUntil = 0;
 function addMobileLongPress(element, openEditor) {
   let timer = null;
+  let triggered = false;
   let startX = 0;
   let startY = 0;
   const cancel = () => {
     clearTimeout(timer);
     timer = null;
+    triggered = false;
     element.classList.remove("long-pressing");
   };
   element.addEventListener("touchstart", event => {
     if (event.touches.length !== 1 || state.meetingView === "past" || window.innerWidth > 700) return;
     const touch = event.touches[0];
+    triggered = false;
     startX = touch.clientX;
     startY = touch.clientY;
     timer = window.setTimeout(() => {
       timer = null;
-      element.classList.remove("long-pressing");
-      suppressLongPressClickUntil = Date.now() + 700;
+      triggered = true;
+      element.classList.add("long-pressing");
       navigator.vibrate?.(35);
-      openEditor();
-    }, 550);
+    }, 480);
     window.setTimeout(() => { if (timer) element.classList.add("long-pressing"); }, 260);
   }, { passive: true });
   element.addEventListener("touchmove", event => {
-    if (!timer || event.touches.length !== 1) return;
+    if ((!timer && !triggered) || event.touches.length !== 1) return;
     const touch = event.touches[0];
     if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 10) cancel();
   }, { passive: true });
-  element.addEventListener("touchend", cancel, { passive: true });
+  element.addEventListener("touchend", () => {
+    const shouldOpen = triggered;
+    cancel();
+    if (!shouldOpen) return;
+    suppressLongPressClickUntil = Date.now() + 700;
+    window.getSelection()?.removeAllRanges();
+    window.setTimeout(() => {
+      openEditor();
+      window.getSelection()?.removeAllRanges();
+    }, 0);
+  }, { passive: true });
   element.addEventListener("touchcancel", cancel, { passive: true });
   element.addEventListener("contextmenu", event => {
     if (window.innerWidth <= 700) event.preventDefault();
