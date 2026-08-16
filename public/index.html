@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260816-12" />
+    <link rel="stylesheet" href="./styles.css?v=20260816-20" />
   </head>
   <body>
     <div class="page-shell">
@@ -14,9 +14,14 @@
           <img class="brand-logo" src="./toastmasters-logo.jpg" alt="Toastmasters International 로고" />
           <span><strong>YEONGTONG</strong><small>TOASTMASTERS</small></span>
         </a>
-        <button id="refreshButton" class="refresh-button" type="button" aria-label="Google Sheet 새로고침">
-          <span aria-hidden="true">↻</span> Refresh
-        </button>
+        <div class="topbar-actions">
+          <span id="draftSyncBadge" class="draft-sync-badge synced">Google Sheet synced</span>
+          <button id="applySheetsButton" class="apply-sheets-button" type="button">Apply to Google Sheets</button>
+          <button id="adminSettingsButton" class="admin-settings-button" type="button" aria-label="Open administrator settings"><span aria-hidden="true">⚙</span> Admin</button>
+          <button id="refreshButton" class="refresh-button" type="button" aria-label="Google Sheet 새로고침">
+            <span aria-hidden="true">↻</span> Refresh
+          </button>
+        </div>
       </header>
 
       <nav class="dashboard-tabs" aria-label="Meeting views" role="tablist">
@@ -104,16 +109,16 @@
           </div>
           <div id="specialEvent" class="special-event hidden"></div>
           <article class="panel meeting-context-panel">
-            <div class="panel-title"><h3>Meeting theme</h3><span>From 26_Roles</span></div>
+            <div class="panel-title"><h3>Meeting theme</h3><span>Click an item for details</span></div>
             <div id="meetingContext" class="meeting-context-grid"></div>
           </article>
           <div class="week-stack">
             <article class="panel assignments-panel">
-              <div class="panel-title"><h3>Role assignments</h3><span>From 26_Roles</span></div>
+              <div class="panel-title"><h3>Role assignments</h3><span>Click a role for details</span></div>
               <div id="weekAssignments" class="assignment-grid"></div>
             </article>
             <article class="panel week-speeches-panel">
-              <div class="panel-title"><h3>Prepared speeches</h3><span>Hover for project details</span></div>
+              <div class="panel-title"><h3>Prepared speeches</h3><div class="panel-title-actions"><span>Click for details</span><button type="button" class="panel-edit-button" data-edit-section="speeches">Edit</button></div></div>
               <div id="weekSpeeches" class="week-speeches"></div>
             </article>
             <article class="panel agenda-panel">
@@ -143,6 +148,7 @@
         <button type="button" id="closeSpeechDialog" class="dialog-close" aria-label="Close speech details">&times;</button>
       </div>
       <div id="speechDialogDetails" class="speech-dialog-details"></div>
+      <div id="speechDialogActions" class="agenda-dialog-actions"><button type="button" id="speechDialogEditButton" class="primary-button">Edit this speech</button></div>
     </dialog>
     <dialog id="agendaDetailsDialog" class="agenda-dialog" aria-labelledby="agendaDialogTitle">
       <div class="missing-dialog-heading">
@@ -150,8 +156,56 @@
         <button type="button" id="closeAgendaDialog" class="dialog-close" aria-label="Close agenda details">&times;</button>
       </div>
       <div id="agendaDialogDetails" class="agenda-dialog-details"></div>
+      <div id="agendaDialogActions" class="agenda-dialog-actions hidden"><button type="button" id="agendaDialogEditButton" class="primary-button">Edit</button></div>
+    </dialog>
+    <dialog id="meetingEditDialog" class="meeting-edit-dialog" aria-labelledby="meetingEditTitle">
+      <form id="meetingEditForm" method="dialog">
+        <div class="missing-dialog-heading">
+          <div><p id="meetingEditEyebrow">EDIT MEETING</p><h2 id="meetingEditTitle">Edit meeting</h2></div>
+          <button type="button" id="closeMeetingEditDialog" class="dialog-close" aria-label="Close meeting editor">&times;</button>
+        </div>
+        <p class="meeting-edit-help">Changes are saved to the shared draft first. Everyone can see them before an administrator applies them to Google Sheets.</p>
+        <div id="meetingEditFields" class="meeting-edit-fields"></div>
+        <p id="meetingEditStatus" class="meeting-edit-status" role="status"></p>
+        <div id="meetingSaveProgress" class="meeting-save-progress" aria-hidden="true"><span></span></div>
+        <div class="meeting-edit-actions">
+          <button type="button" id="cancelMeetingEdit" class="secondary-button">Cancel</button>
+          <button type="submit" id="saveMeetingEdit" class="primary-button"><span class="save-button-label">Save changes</span></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="adminApplyDialog" class="admin-dialog" aria-labelledby="adminApplyTitle">
+      <form id="adminApplyForm" method="dialog">
+        <div class="missing-dialog-heading">
+          <div><p>ADMIN APPROVAL</p><h2 id="adminApplyTitle">Apply shared draft</h2></div>
+          <button type="button" id="closeAdminApplyDialog" class="dialog-close" aria-label="Close administrator approval">&times;</button>
+        </div>
+        <p id="adminApplySummary" class="admin-dialog-copy">No pending shared changes.</p>
+        <label class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
+        <p id="adminApplyStatus" class="meeting-edit-status" role="status"></p>
+        <div class="meeting-edit-actions admin-actions">
+          <button type="button" id="openChangePinDialog" class="secondary-button">Change PIN</button>
+          <button type="submit" id="confirmApplySheets" class="primary-button">Apply changes</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="changePinDialog" class="admin-dialog" aria-labelledby="changePinTitle">
+      <form id="changePinForm" method="dialog">
+        <div class="missing-dialog-heading">
+          <div><p>ADMIN SECURITY</p><h2 id="changePinTitle">Change administrator PIN</h2></div>
+          <button type="button" id="closeChangePinDialog" class="dialog-close" aria-label="Close PIN editor">&times;</button>
+        </div>
+        <div class="pin-change-fields">
+          <label class="admin-pin-field">Current 4-digit PIN<input id="currentAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
+          <label class="admin-pin-field">New 4-digit PIN<input id="newAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
+          <label class="admin-pin-field">Confirm new PIN<input id="confirmAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
+        </div>
+        <p id="changePinStatus" class="meeting-edit-status" role="status"></p>
+        <div class="meeting-edit-actions"><button type="submit" class="primary-button">Change PIN</button></div>
+      </form>
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
-    <script src="./app.js?v=20260816-12" defer></script>
+    <script src="./config.js?v=20260816-3"></script>
+    <script src="./app.js?v=20260816-28" defer></script>
   </body>
 </html>
