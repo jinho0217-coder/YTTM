@@ -68,6 +68,8 @@ a { color: inherit; }
 }
 .dashboard-tabs button:hover { color: var(--red); background: rgba(159,36,53,.06); }
 .dashboard-tabs button[aria-selected="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
+.dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 15px; }
+.dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
 [data-tab-panel][hidden] { display: none !important; }
 .refresh-button { color: var(--white); background: transparent; border: 1px solid rgba(255,255,255,.32); padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: 12px; }
 .refresh-button:hover { background: rgba(255,255,255,.1); }
@@ -206,7 +208,9 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .speech-dialog { width: min(600px, calc(100% - 32px)); padding: 0; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(17,31,37,.28); }
 .speech-dialog::backdrop { background: rgba(17,31,37,.48); backdrop-filter: blur(2px); }
 .speech-dialog-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.speech-detail-item { min-height: 105px; padding: 20px 24px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.speech-detail-item { min-height: 105px; padding: 20px 24px; color: inherit; text-align: left; background: transparent; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.speech-detail-item[role="button"], button.speech-detail-item { cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+.speech-detail-item[role="button"]:hover, button.speech-detail-item:hover, button.speech-detail-item:focus-visible { background: #eef5f6; box-shadow: inset 4px 0 0 var(--blue); outline: 0; }
 .speech-detail-item:nth-child(2n) { border-right: 0; }
 .speech-detail-item:nth-last-child(-n+2) { border-bottom: 0; }
 .speech-detail-item span { display: block; color: var(--red); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -293,6 +297,14 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .admin-dialog { width: min(540px, calc(100% - 32px)); padding: 0; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(17,31,37,.28); }
 .admin-dialog::backdrop { background: rgba(17,31,37,.56); backdrop-filter: blur(2px); }
 .admin-dialog-copy { margin: 0; padding: 19px 26px 8px; color: var(--muted); font-size: 13px; }
+.admin-apply-details { margin: 8px 26px 4px; border: 1px solid var(--line); background: var(--white); }
+.admin-apply-details summary { padding: 13px 15px; color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 800; }
+.admin-apply-list { display: grid; border-top: 1px solid var(--line); }
+.admin-apply-item { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 5px 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+.admin-apply-item:last-child { border-bottom: 0; }
+.admin-apply-item time { grid-row: span 2; color: var(--red); font-size: 11px; font-weight: 800; }
+.admin-apply-item strong { font-size: 13px; }
+.admin-apply-item span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .admin-pin-field { display: grid; gap: 8px; padding: 14px 26px; color: var(--red); font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .admin-pin-field input { width: 100%; padding: 13px 14px; color: var(--ink); background: var(--white); border: 1px solid var(--line); font-size: 18px; letter-spacing: .3em; }
 .admin-pin-field input:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
@@ -381,10 +393,11 @@ footer p { text-align: right; }
   .brand { gap: 9px; }
   .brand-logo { width: 42px; height: 42px; padding: 2px; }
   .brand strong { font-size: 11px; }
-  .dashboard-tabs { top: 66px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 12px; overflow: visible; }
+  .dashboard-tabs { top: 66px; display: grid; grid-template-columns: 38px minmax(0, .8fr) minmax(0, 1.25fr) minmax(0, .8fr) 38px; padding: 10px 12px; overflow: visible; }
   .dashboard-tabs { scrollbar-width: none; }
   .dashboard-tabs::-webkit-scrollbar { display: none; }
   .dashboard-tabs button { min-width: 0; min-height: 40px; padding: 8px 5px; font-size: 10px; white-space: nowrap; touch-action: manipulation; }
+  .dashboard-tabs .meeting-arrow { min-width: 0; font-size: 13px; }
   .refresh-button { min-width: 44px; min-height: 40px; padding: 8px 11px; }
   .topbar-actions { gap: 6px; }
   .draft-sync-badge { display: none; }
@@ -512,6 +525,7 @@ footer p { text-align: right; }
   .meeting-edit-status { padding: 0 18px 12px; }
   .meeting-save-progress { margin-left: 18px; margin-right: 18px; }
   .admin-dialog-copy, .admin-pin-field { padding-left: 18px; padding-right: 18px; }
+  .admin-apply-details { margin-left: 18px; margin-right: 18px; }
   .assignment-grid, .week-speeches { padding: 14px; }
   .assignment { min-height: 86px; padding: 14px 16px; }
   .assignment span { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
