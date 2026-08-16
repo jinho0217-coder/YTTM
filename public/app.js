@@ -1308,7 +1308,7 @@ document.getElementById("meetingEditFields").addEventListener("click", event => 
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => {
     if (button.dataset.dashboardTab === "coming") animateReturnToComing();
-    else if (!swipeAnimating) setActiveTab(button.dataset.dashboardTab);
+    else if (!swipeAnimating) animateHeaderMeeting(button.dataset.dashboardTab);
   });
 });
 let swipeStart = null;
@@ -1332,6 +1332,18 @@ function moveMeetingByArrow(direction) {
   const targetIndex = state.model.comingMeetingIndex + targetOffset;
   if (targetIndex < 0 || targetIndex >= state.model.regularMeetings.length) return;
   completeMeetingSwipe(targetOffset, direction < 0 ? 1 : -1);
+}
+
+function animateHeaderMeeting(tabName) {
+  const targetOffset = tabName === "past" ? -1 : 1;
+  if (!state.model || state.meetingOffset === targetOffset) {
+    setActiveTab(tabName);
+    return;
+  }
+  const targetIndex = state.model.comingMeetingIndex + targetOffset;
+  if (targetIndex < 0 || targetIndex >= state.model.regularMeetings.length) return;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  completeMeetingSwipe(targetOffset, targetOffset < state.meetingOffset ? 1 : -1);
 }
 
 document.querySelectorAll("[data-meeting-arrow]").forEach(button => {

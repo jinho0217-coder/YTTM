@@ -57,18 +57,19 @@ a { color: inherit; }
   backdrop-filter: blur(12px);
 }
 .dashboard-tabs button {
-  padding: 9px 18px;
+  padding: 6px 18px;
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 20px;
   font-weight: 700;
+  line-height: 1;
 }
 .dashboard-tabs button:hover { color: var(--red); background: rgba(159,36,53,.06); }
 .dashboard-tabs button[aria-selected="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
-.dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 15px; }
+.dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 20px; }
 .dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
 [data-tab-panel][hidden] { display: none !important; }
 .refresh-button { color: var(--white); background: transparent; border: 1px solid rgba(255,255,255,.32); padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: 12px; }
@@ -396,8 +397,8 @@ footer p { text-align: right; }
   .dashboard-tabs { top: 66px; display: grid; grid-template-columns: 38px minmax(0, .8fr) minmax(0, 1.25fr) minmax(0, .8fr) 38px; padding: 10px 12px; overflow: visible; }
   .dashboard-tabs { scrollbar-width: none; }
   .dashboard-tabs::-webkit-scrollbar { display: none; }
-  .dashboard-tabs button { min-width: 0; min-height: 40px; padding: 8px 5px; font-size: 10px; white-space: nowrap; touch-action: manipulation; }
-  .dashboard-tabs .meeting-arrow { min-width: 0; font-size: 13px; }
+  .dashboard-tabs button { min-width: 0; min-height: 40px; padding: 8px 5px; font-size: 18px; letter-spacing: -.035em; white-space: nowrap; touch-action: manipulation; }
+  .dashboard-tabs .meeting-arrow { min-width: 0; font-size: 18px; letter-spacing: normal; }
   .refresh-button { min-width: 44px; min-height: 40px; padding: 8px 11px; }
   .topbar-actions { gap: 6px; }
   .draft-sync-badge { display: none; }
