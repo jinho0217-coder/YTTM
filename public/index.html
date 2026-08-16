@@ -25,9 +25,11 @@
       </header>
 
       <nav class="dashboard-tabs" aria-label="Meeting views" role="tablist">
-        <button type="button" role="tab" data-dashboard-tab="past" aria-selected="false">Past Meeting</button>
-        <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up Meeting</button>
-        <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next Meeting</button>
+        <button type="button" class="meeting-arrow" data-meeting-arrow="-1" aria-label="Previous meeting. Hold to go to the first meeting.">◀</button>
+        <button type="button" role="tab" data-dashboard-tab="past" aria-selected="false">Past</button>
+        <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up</button>
+        <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next</button>
+        <button type="button" class="meeting-arrow" data-meeting-arrow="1" aria-label="Next meeting. Hold to go to the last meeting.">▶</button>
       </nav>
 
       <main id="top">
@@ -181,6 +183,10 @@
           <button type="button" id="closeAdminApplyDialog" class="dialog-close" aria-label="Close administrator approval">&times;</button>
         </div>
         <p id="adminApplySummary" class="admin-dialog-copy">No pending shared changes.</p>
+        <details id="adminApplyDetails" class="admin-apply-details">
+          <summary id="adminApplyCompact">View pending changes</summary>
+          <div id="adminApplyList" class="admin-apply-list"></div>
+        </details>
         <label class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
         <p id="adminApplyStatus" class="meeting-edit-status" role="status"></p>
         <div class="meeting-edit-actions admin-actions">
@@ -206,6 +212,6 @@
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20260817-2" defer></script>
+    <script src="./app.js?v=20260817-3" defer></script>
   </body>
 </html>

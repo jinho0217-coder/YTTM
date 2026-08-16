@@ -142,6 +142,7 @@ function setMeetingOffset(offset, updateHash = true, scrollToTop = false) {
   }
   state.meetingOffset = nextOffset;
   state.meetingView = nextOffset < 0 ? "past" : nextOffset > 0 ? "next" : "coming";
+  updateMeetingArrowControls();
   document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
     button.setAttribute("aria-selected", String(button.dataset.dashboardTab === state.meetingView));
   });
@@ -639,14 +640,15 @@ function updateMeetingFieldLocks() {
   }
 }
 
-function openMeetingEditor(section, field = "", speechSlot = null) {
+function openMeetingEditor(section, field = "", speechSlot = null, originItem = null) {
   const meeting = activeMeeting();
   if (!meeting || !canEditActiveMeeting()) return;
   state.editSection = section;
   state.editMeeting = meeting;
+  state.editOriginSpeechItem = originItem;
   const titles = { theme: "Meeting theme", roles: "Role assignments", speeches: "Prepared speeches" };
   setText("meetingEditEyebrow", `${formatMeetingDate(meeting.date)} MEETING · ${meeting.meetingNo || ""}`);
-  setText("meetingEditTitle", `Edit ${speechSlot ? `Speaker ${speechSlot} speech` : field || titles[section]}`);
+  setText("meetingEditTitle", `Edit ${field || (speechSlot ? `Speaker ${speechSlot} speech` : titles[section])}`);
   let content = "";
   if (section === "theme") {
     const fields = field && THEME_EDIT_FIELDS.includes(field) ? [field] : THEME_EDIT_FIELDS;
@@ -658,9 +660,11 @@ function openMeetingEditor(section, field = "", speechSlot = null) {
   }
   if (section === "speeches") {
     const slots = speechSlot ? [Number(speechSlot)] : [1, 2, 3, 4];
-    content = slots.map(number => `<fieldset class="speech-edit-group"><legend>Speaker ${number}</legend>${[
-      `Speaker ${number}`, `Project ${number}`, `Title ${number}`, `Time ${number}`, `Evaluator ${number}`,
-    ].map(label => editFieldHtml(meeting, label)).join("")}</fieldset>`).join("");
+    content = slots.map(number => {
+      const speechFields = [`Speaker ${number}`, `Project ${number}`, `Title ${number}`, `Time ${number}`, `Evaluator ${number}`];
+      const visibleFields = field && speechFields.includes(field) ? [field] : speechFields;
+      return `<fieldset class="speech-edit-group"><legend>Speaker ${number}</legend>${visibleFields.map(label => editFieldHtml(meeting, label)).join("")}</fieldset>`;
+    }).join("");
   }
   document.getElementById("meetingEditFields").innerHTML = content;
   setText("meetingEditStatus", WRITE_ENDPOINT ? "This will update the shared draft, not Google Sheets." : "Shared draft saving is not configured.");
@@ -718,6 +722,12 @@ async function saveMeetingEditor(event) {
       baseValues,
       fieldVersions,
     });
+    if (state.editOriginSpeechItem) {
+      const editedField = Object.keys(updates)[0];
+      const value = updates[editedField] || "Pending";
+      state.editOriginSpeechItem.querySelector("strong").textContent = value;
+      state.editOriginSpeechItem.classList.toggle("pending", value === "Pending");
+    }
     status.className = "meeting-edit-status success";
     status.textContent = `Draft saved. Updating everyone’s view…`;
     await loadDashboard(true);
@@ -747,6 +757,17 @@ function openAdminApplyDialog() {
   if (!entries.length) return;
   const meetings = new Set(entries.map(entry => entry.meetingDate)).size;
   setText("adminApplySummary", `${entries.length} shared change${entries.length === 1 ? "" : "s"} across ${meetings} meeting${meetings === 1 ? "" : "s"} will be written to Google Sheets.`);
+  const uniqueLabels = [...new Set(entries.map(entry => entry.label))];
+  const compactLabels = uniqueLabels.slice(0, 2).join(", ");
+  const remaining = Math.max(0, uniqueLabels.length - 2);
+  setText("adminApplyCompact", `${compactLabels}${remaining ? ` +${remaining}` : ""}`);
+  document.getElementById("adminApplyList").innerHTML = entries.map(entry => `
+    <div class="admin-apply-item">
+      <time>${escapeHtml(entry.meetingDate)}</time>
+      <strong>${escapeHtml(entry.section)} · ${escapeHtml(entry.label)}</strong>
+      <span>${escapeHtml(entry.value || "(clear value)")}</span>
+    </div>`).join("");
+  document.getElementById("adminApplyDetails").open = false;
   const status = document.getElementById("adminApplyStatus");
   status.className = "meeting-edit-status";
   status.textContent = "Enter the administrator PIN to apply all shared changes.";
@@ -977,6 +998,7 @@ function renderSpeeches(model) {
 }
 
 function renderThisWeek(model) {
+  updateMeetingArrowControls();
   const meeting = activeMeeting();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
     button.disabled = !canEditActiveMeeting();
@@ -1080,16 +1102,28 @@ function renderThisWeek(model) {
 function showSpeechDetails(speech) {
   hideTooltip();
   setText("speechDialogTitle", speech.title || "Title Pending");
-  document.getElementById("speechDialogDetails").innerHTML = [
+  const details = [
     ["Speaker", speech.speaker],
     ["Project", speech.project || "Pending"],
+    ["Title", speech.title || "Pending"],
     ["Time", speech.time || "Pending"],
     ["Evaluator", speech.evaluator || "Pending"],
-  ].map(([label, value]) => `<div class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  ];
+  const editable = canEditActiveMeeting();
+  document.getElementById("speechDialogDetails").innerHTML = details.map(([label, value]) => {
+    const tag = editable ? "button" : "div";
+    const field = `${label} ${speech.slot}`;
+    return `<${tag} ${editable ? `type="button" data-speech-field="${escapeHtml(field)}"` : ""} class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></${tag}>`;
+  }).join("");
+  document.querySelectorAll("#speechDialogDetails [data-speech-field]").forEach(item => {
+    item.addEventListener("click", event => {
+      event.stopPropagation();
+      openMeetingEditor("speeches", item.dataset.speechField, speech.slot, item);
+    });
+  });
   const editButton = document.getElementById("speechDialogEditButton");
   const actions = document.getElementById("speechDialogActions");
   editButton.dataset.speechSlot = speech.slot;
-  const editable = canEditActiveMeeting();
   actions.classList.toggle("hidden", !editable);
   editButton.disabled = !editable;
   document.getElementById("speechDetailsDialog").showModal();
@@ -1259,6 +1293,7 @@ function closeMeetingEditor() {
   clearInterval(meetingLockTimer);
   meetingLockTimer = null;
   meetingEditDialog.close();
+  state.editOriginSpeechItem = null;
 }
 document.getElementById("closeMeetingEditDialog").addEventListener("click", closeMeetingEditor);
 document.getElementById("cancelMeetingEdit").addEventListener("click", closeMeetingEditor);
@@ -1280,6 +1315,54 @@ let swipeStart = null;
 let suppressSwipeClickUntil = 0;
 let swipeAnimating = false;
 const meetingPanel = document.getElementById("this-week");
+let suppressArrowClickUntil = 0;
+
+function updateMeetingArrowControls() {
+  if (!state.model) return;
+  const currentIndex = state.model.comingMeetingIndex + state.meetingOffset;
+  document.querySelectorAll("[data-meeting-arrow]").forEach(button => {
+    const direction = Number(button.dataset.meetingArrow);
+    button.disabled = direction < 0 ? currentIndex <= 0 : currentIndex >= state.model.regularMeetings.length - 1;
+  });
+}
+
+function moveMeetingByArrow(direction) {
+  if (swipeAnimating || !state.model) return;
+  const targetOffset = state.meetingOffset + direction;
+  const targetIndex = state.model.comingMeetingIndex + targetOffset;
+  if (targetIndex < 0 || targetIndex >= state.model.regularMeetings.length) return;
+  completeMeetingSwipe(targetOffset, direction < 0 ? 1 : -1);
+}
+
+document.querySelectorAll("[data-meeting-arrow]").forEach(button => {
+  let holdTimer = null;
+  let held = false;
+  const direction = Number(button.dataset.meetingArrow);
+  const cancelHold = () => { clearTimeout(holdTimer); holdTimer = null; };
+  button.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || button.disabled || swipeAnimating) return;
+    held = false;
+    holdTimer = window.setTimeout(() => {
+      held = true;
+      suppressArrowClickUntil = Date.now() + 700;
+      const edgeOffset = direction < 0 ? -state.model.comingMeetingIndex : state.model.regularMeetings.length - state.model.comingMeetingIndex - 1;
+      completeMeetingSwipe(edgeOffset, direction < 0 ? 1 : -1);
+      navigator.vibrate?.(35);
+    }, 600);
+  });
+  button.addEventListener("pointerup", cancelHold);
+  button.addEventListener("pointercancel", cancelHold);
+  button.addEventListener("pointerleave", cancelHold);
+  button.addEventListener("contextmenu", event => event.preventDefault());
+  button.addEventListener("click", event => {
+    if (held || Date.now() < suppressArrowClickUntil) {
+      event.preventDefault();
+      held = false;
+      return;
+    }
+    moveMeetingByArrow(direction);
+  });
+});
 function meetingSwipeTarget(deltaX) {
   if (!state.model) return null;
   const targetOffset = state.meetingOffset + (deltaX < 0 ? 1 : -1);
@@ -1333,7 +1416,7 @@ function animateReturnToComing() {
   swipeStart = null;
   window.scrollTo({ top: 0, behavior: "smooth" });
   const pageCount = Math.abs(state.meetingOffset);
-  const stepDuration = Math.max(26, Math.min(125, 1200 / pageCount));
+  const stepDuration = Math.max(18, Math.min(85, 650 / pageCount));
   const halfStep = Math.max(13, Math.floor(stepDuration / 2));
   const direction = Math.sign(state.meetingOffset);
   const advance = () => {
