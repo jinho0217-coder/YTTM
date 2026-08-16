@@ -1,4 +1,4 @@
-const state = { model: null, member: "all", role: "all", meetingView: "coming", sharedDrafts: { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} }, sheetBaseValues: {} };
+const state = { model: null, member: "all", role: "all", meetingView: "coming", meetingOffset: 0, sharedDrafts: { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} }, sheetBaseValues: {} };
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
@@ -129,9 +129,21 @@ async function fetchPublicSheets() {
 function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
   const validTabs = new Set(["past", "coming", "next"]);
   const activeTab = validTabs.has(tabName) ? tabName : "coming";
-  state.meetingView = activeTab;
+  const offsets = { past: -1, coming: 0, next: 1 };
+  setMeetingOffset(offsets[activeTab], updateHash, scrollToTop);
+}
+
+function setMeetingOffset(offset, updateHash = true, scrollToTop = false) {
+  let nextOffset = Number(offset || 0);
+  if (state.model) {
+    const minimum = -state.model.comingMeetingIndex;
+    const maximum = state.model.regularMeetings.length - state.model.comingMeetingIndex - 1;
+    nextOffset = Math.max(minimum, Math.min(maximum, nextOffset));
+  }
+  state.meetingOffset = nextOffset;
+  state.meetingView = nextOffset < 0 ? "past" : nextOffset > 0 ? "next" : "coming";
   document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
-    button.setAttribute("aria-selected", String(button.dataset.dashboardTab === activeTab));
+    button.setAttribute("aria-selected", String(button.dataset.dashboardTab === state.meetingView));
   });
   document.querySelectorAll("[data-tab-panel]").forEach(panel => {
     panel.hidden = panel.dataset.tabPanel !== "week";
@@ -139,7 +151,7 @@ function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
   if (state.model) renderThisWeek(state.model);
   if (updateHash) {
     const hashes = { past: "#past-meeting", coming: "#coming-up", next: "#next-meeting" };
-    history.replaceState(null, "", hashes[activeTab]);
+    history.replaceState(null, "", hashes[state.meetingView]);
   }
   if (scrollToTop) window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -263,6 +275,8 @@ function buildModel(rolesRows, agendaRows) {
   const upcomingMeetings = columns.filter(c => c.date >= meetingReferenceDate && !c.noMeeting);
   const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
   const followingMeeting = upcomingMeetings[1] || null;
+  const regularMeetings = columns.filter(c => !c.noMeeting);
+  const comingMeetingIndex = Math.max(0, regularMeetings.findIndex(c => c.col === comingMeeting?.col));
   const assignments = [];
   const speeches = [];
 
@@ -310,7 +324,7 @@ function buildModel(rolesRows, agendaRows) {
   });
 
   return {
-    today, rowsByLabel, columns, completedColumns, completedSet, pastMeeting, comingMeeting, followingMeeting,
+    today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, pastMeeting, comingMeeting, followingMeeting,
     assignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
@@ -445,7 +459,7 @@ function showAgendaDetails(item) {
 function configureDetailsEditor(section = "", field = "") {
   const actions = document.getElementById("agendaDialogActions");
   const button = document.getElementById("agendaDialogEditButton");
-  const editable = Boolean(section) && state.meetingView !== "past";
+  const editable = Boolean(section) && canEditActiveMeeting();
   if (!actions.contains(button)) actions.appendChild(button);
   button.dataset.editSection = section;
   button.dataset.editField = field;
@@ -532,7 +546,7 @@ function addMobileLongPress(element, openEditor) {
     element.classList.remove("long-pressing");
   };
   element.addEventListener("touchstart", event => {
-    if (event.touches.length !== 1 || state.meetingView === "past" || window.innerWidth > 700) return;
+    if (event.touches.length !== 1 || !canEditActiveMeeting() || window.innerWidth > 700) return;
     const touch = event.touches[0];
     triggered = false;
     startX = touch.clientX;
@@ -569,7 +583,11 @@ function addMobileLongPress(element, openEditor) {
 
 function activeMeeting() {
   if (!state.model) return null;
-  return state.meetingView === "coming" ? state.model.comingMeeting : state.meetingView === "next" ? state.model.followingMeeting : state.model.pastMeeting;
+  return state.model.regularMeetings[state.model.comingMeetingIndex + state.meetingOffset] || null;
+}
+
+function canEditActiveMeeting() {
+  return Boolean(activeMeeting()) && (state.meetingOffset === 0 || state.meetingOffset === 1);
 }
 
 function editableValue(meeting, label) {
@@ -623,7 +641,7 @@ function updateMeetingFieldLocks() {
 
 function openMeetingEditor(section, field = "", speechSlot = null) {
   const meeting = activeMeeting();
-  if (!meeting || state.meetingView === "past") return;
+  if (!meeting || !canEditActiveMeeting()) return;
   state.editSection = section;
   state.editMeeting = meeting;
   const titles = { theme: "Meeting theme", roles: "Role assignments", speeches: "Prepared speeches" };
@@ -673,7 +691,7 @@ function setMeetingSaveBusy(busy) {
 
 async function saveMeetingEditor(event) {
   event.preventDefault();
-  if (!state.editMeeting || state.meetingView === "past") return;
+  if (!state.editMeeting || !canEditActiveMeeting()) return;
   const saveButton = document.getElementById("saveMeetingEdit");
   const status = document.getElementById("meetingEditStatus");
   if (!WRITE_ENDPOINT) {
@@ -959,15 +977,10 @@ function renderSpeeches(model) {
 }
 
 function renderThisWeek(model) {
-  const meetingsByView = {
-    past: model.pastMeeting,
-    coming: model.comingMeeting,
-    next: model.followingMeeting,
-  };
-  const meeting = meetingsByView[state.meetingView];
+  const meeting = activeMeeting();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
-    button.disabled = state.meetingView === "past" || !meeting;
-    button.title = state.meetingView === "past" ? "Past meetings are read-only." : "";
+    button.disabled = !canEditActiveMeeting();
+    button.title = state.meetingOffset < 0 ? "Past meetings are read-only." : state.meetingOffset > 1 ? "Only Coming Up and Next Meeting can be edited." : "";
   });
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
@@ -1076,7 +1089,7 @@ function showSpeechDetails(speech) {
   const editButton = document.getElementById("speechDialogEditButton");
   const actions = document.getElementById("speechDialogActions");
   editButton.dataset.speechSlot = speech.slot;
-  const editable = state.meetingView !== "past" && Boolean(activeMeeting());
+  const editable = canEditActiveMeeting();
   actions.classList.toggle("hidden", !editable);
   editButton.disabled = !editable;
   document.getElementById("speechDetailsDialog").showModal();
@@ -1264,12 +1277,11 @@ let swipeStart = null;
 let suppressSwipeClickUntil = 0;
 let swipeAnimating = false;
 const meetingPanel = document.getElementById("this-week");
-const meetingViews = ["past", "coming", "next"];
-
 function meetingSwipeTarget(deltaX) {
-  const currentIndex = meetingViews.indexOf(state.meetingView);
-  const targetIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
-  return meetingViews[targetIndex] || null;
+  if (!state.model) return null;
+  const targetOffset = state.meetingOffset + (deltaX < 0 ? 1 : -1);
+  const targetIndex = state.model.comingMeetingIndex + targetOffset;
+  return targetIndex >= 0 && targetIndex < state.model.regularMeetings.length ? targetOffset : null;
 }
 
 function resetMeetingSwipe(animated = true) {
@@ -1278,9 +1290,9 @@ function resetMeetingSwipe(animated = true) {
   meetingPanel.style.opacity = "1";
 }
 
-function completeMeetingSwipe(target, deltaX) {
+function completeMeetingSwipe(targetOffset, deltaX) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    setActiveTab(target, true, false);
+    setMeetingOffset(targetOffset, true, false);
     resetMeetingSwipe(false);
     return;
   }
@@ -1290,7 +1302,7 @@ function completeMeetingSwipe(target, deltaX) {
   meetingPanel.style.transform = `translate3d(${direction * window.innerWidth}px, 0, 0)`;
   meetingPanel.style.opacity = "0.35";
   window.setTimeout(() => {
-    setActiveTab(target, true, false);
+    setMeetingOffset(targetOffset, true, false);
     meetingPanel.style.transition = "none";
     meetingPanel.style.transform = `translate3d(${-direction * window.innerWidth}px, 0, 0)`;
     meetingPanel.style.opacity = "0.35";
@@ -1322,7 +1334,7 @@ document.addEventListener("touchmove", event => {
   const deltaY = touch.clientY - swipeStart.y;
   if (Math.abs(deltaX) <= 8 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
   event.preventDefault();
-  const atBoundary = !meetingSwipeTarget(deltaX);
+  const atBoundary = meetingSwipeTarget(deltaX) === null;
   const visualX = atBoundary ? deltaX * 0.18 : deltaX;
   meetingPanel.style.transition = "none";
   meetingPanel.style.transform = `translate3d(${visualX}px, 0, 0)`;
@@ -1341,7 +1353,7 @@ document.addEventListener("touchend", event => {
   }
   suppressSwipeClickUntil = Date.now() + 450;
   const target = meetingSwipeTarget(deltaX);
-  if (target) completeMeetingSwipe(target, deltaX);
+  if (target !== null) completeMeetingSwipe(target, deltaX);
   else resetMeetingSwipe(true);
 }, { passive: true });
 document.addEventListener("touchcancel", () => { swipeStart = null; resetMeetingSwipe(true); }, { passive: true });
