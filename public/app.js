@@ -294,8 +294,9 @@ function renderDetailedAgenda(model, meeting) {
     const bullets = item.bullets?.length
       ? `<ul class="agenda-bullets">${item.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
       : "";
+    const isSpeechTable = item.table?.headers.length > 2;
     const table = item.table
-      ? `<div class="agenda-table-wrap"><table class="agenda-table"><thead><tr>${item.table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${item.table.rows.map(row => `<tr>${row.map(value => `<td class="${value === "Pending" ? "pending" : ""}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+      ? `<div class="agenda-table-wrap ${isSpeechTable ? "speech-agenda-table-wrap" : ""}"><table class="agenda-table ${isSpeechTable ? "speech-agenda-table" : ""}"><thead><tr>${item.table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${item.table.rows.map(row => `<tr>${row.map((value, index) => `<td data-label="${escapeHtml(item.table.headers[index])}" class="${value === "Pending" ? "pending" : ""}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
       : "";
     const note = item.note ? `<p class="agenda-note">${escapeHtml(item.note)}</p>` : "";
     return `<section class="agenda-detail-item"><div class="agenda-detail-heading"><time>${escapeHtml(item.time)}</time><h4>${escapeHtml(item.title)}${owner}</h4></div>${bullets}${table}${note}</section>`;
