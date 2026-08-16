@@ -519,6 +519,42 @@ function showThemeDetails(label, value) {
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
+let suppressLongPressClickUntil = 0;
+function addMobileLongPress(element, openEditor) {
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    element.classList.remove("long-pressing");
+  };
+  element.addEventListener("touchstart", event => {
+    if (event.touches.length !== 1 || state.meetingView === "past" || window.innerWidth > 700) return;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    timer = window.setTimeout(() => {
+      timer = null;
+      element.classList.remove("long-pressing");
+      suppressLongPressClickUntil = Date.now() + 700;
+      navigator.vibrate?.(35);
+      openEditor();
+    }, 550);
+    window.setTimeout(() => { if (timer) element.classList.add("long-pressing"); }, 260);
+  }, { passive: true });
+  element.addEventListener("touchmove", event => {
+    if (!timer || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 10) cancel();
+  }, { passive: true });
+  element.addEventListener("touchend", cancel, { passive: true });
+  element.addEventListener("touchcancel", cancel, { passive: true });
+  element.addEventListener("contextmenu", event => {
+    if (window.innerWidth <= 700) event.preventDefault();
+  });
+}
+
 function activeMeeting() {
   if (!state.model) return null;
   return state.meetingView === "coming" ? state.model.comingMeeting : state.meetingView === "next" ? state.model.followingMeeting : state.model.pastMeeting;
@@ -961,7 +997,9 @@ function renderThisWeek(model) {
       <strong>${escapeHtml(value || "Pending")}</strong>
     </button>`).join("");
   meetingContext.querySelectorAll("[data-theme-index]").forEach(button => {
-    button.addEventListener("click", () => showThemeDetails(...contextFields[Number(button.dataset.themeIndex)]));
+    const [label, value] = contextFields[Number(button.dataset.themeIndex)];
+    button.addEventListener("click", () => showThemeDetails(label, value));
+    addMobileLongPress(button, () => openMeetingEditor("theme", label));
   });
 
   const assignments = [];
@@ -977,6 +1015,7 @@ function renderThisWeek(model) {
   assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
     const assignment = assignments[Number(button.dataset.assignmentIndex)];
     button.addEventListener("click", () => showRoleDetails(assignment));
+    addMobileLongPress(button, () => openMeetingEditor("roles", assignment.role));
   });
   renderCompactAgenda(model, meeting);
 
@@ -1003,6 +1042,7 @@ function renderThisWeek(model) {
     addTooltip(card, `${speech.speaker} · ${speech.title}\nProject: ${speech.project || "—"}\nTime: ${speech.time || "—"}\nEvaluator: ${speech.evaluator || "—"}`);
     const openDetails = () => showSpeechDetails(speech);
     card.addEventListener("click", openDetails);
+    addMobileLongPress(card, () => openMeetingEditor("speeches", "", speech.slot));
     card.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
@@ -1294,7 +1334,7 @@ document.addEventListener("touchend", event => {
 }, { passive: true });
 document.addEventListener("touchcancel", () => { swipeStart = null; resetMeetingSwipe(true); }, { passive: true });
 document.addEventListener("click", event => {
-  if (Date.now() < suppressSwipeClickUntil) {
+  if (Date.now() < suppressSwipeClickUntil || Date.now() < suppressLongPressClickUntil) {
     event.preventDefault();
     event.stopPropagation();
   }
