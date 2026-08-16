@@ -320,6 +320,58 @@ function showAgendaDetails(item) {
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
+const ROLE_AGENDA_DUTIES = {
+  Chairperson: [
+    ["10:00", "Call the meeting to order, welcome members and guests, read the mission statement, and introduce the club meeting."],
+    ["11:55", "Close the meeting with the next meeting notice, announcements, role sign-up, guest feedback, and group photo."],
+  ],
+  Toastmaster: [
+    ["10:05", "Call on meeting role holders and introduce the meeting team."],
+    ["10:20", "Conduct the Prepared Speech Session and introduce each speaker."],
+    ["11:50", "Conduct the Awards Session and deliver closing remarks."],
+  ],
+  "General Evaluator": [
+    ["11:30", "Conduct the Evaluation Session, call speech evaluators and role reports, and deliver the General Evaluator's report."],
+  ],
+  "Table Topic Master": [
+    ["11:00", "Conduct the Table Topic Session, call for the Timer's report, recap speakers, and remind members to vote."],
+  ],
+  Timer: [
+    ["10:05", "Explain timing rules and timing signals for prepared speeches, Table Topics, and evaluations."],
+    ["11:00 / 11:30", "Deliver the Timer's reports when called during the Table Topic and Evaluation Sessions."],
+  ],
+  "Ah Counter": [
+    ["10:05", "Explain the role and listen for filler words and unnecessary sounds throughout the meeting."],
+    ["11:30", "Deliver the Ah-Counter's report during the Evaluation Session."],
+  ],
+  Grammarian: [
+    ["10:05", "Introduce the language focus and listen for effective or incorrect language usage."],
+    ["11:30", "Deliver the Grammarian's report during the Evaluation Session."],
+  ],
+  "Word & Quote Master": [
+    ["10:05", "Introduce the Word of the Day and Quote of the Day, including meaning and usage."],
+    ["11:30", "Report how the Word of the Day was used during the meeting."],
+  ],
+  "Quiz Master": [
+    ["10:05", "Explain the listening quiz and note important details throughout the meeting."],
+    ["11:30", "Conduct the quiz and deliver the Quiz Master's report."],
+  ],
+  "Table Topic Evaluator": [
+    ["11:00", "Observe Table Topic speakers and prepare concise feedback."],
+    ["11:30", "Deliver the Table Topic evaluation during the Evaluation Session."],
+  ],
+};
+
+function showRoleDetails(assignment) {
+  const duties = ROLE_AGENDA_DUTIES[assignment.role] || [["Agenda", "Support the meeting according to the Toastmaster's instructions."]];
+  setText("agendaDialogEyebrow", "ROLE RESPONSIBILITIES");
+  setText("agendaDialogTitle", assignment.role);
+  document.getElementById("agendaDialogDetails").innerHTML = `
+    <p class="agenda-dialog-owner">Assigned to · <strong>${escapeHtml(assignment.member)}</strong></p>
+    <ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
+  document.getElementById("agendaDetailsDialog").showModal();
+}
+
 function renderMeetingReadiness(model, meeting) {
   const requirements = [];
   ["Theme", "Theme Question", "Word of the day", "Quote of the day"].forEach(label => {
@@ -527,7 +579,11 @@ function renderThisWeek(model) {
     const member = normalizeName(row[meeting.col]);
     assignments.push({ role, member: member || "Pending", pending: !member });
   });
-  document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment ${item.pending ? "pending" : ""}"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
+  const assignmentContainer = document.getElementById("weekAssignments");
+  assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<button type="button" class="assignment ${item.pending ? "pending" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></button>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
+  assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
+    button.addEventListener("click", () => showRoleDetails(assignments[Number(button.dataset.assignmentIndex)]));
+  });
   renderCompactAgenda(model, meeting);
 
   const weekSpeeches = [];

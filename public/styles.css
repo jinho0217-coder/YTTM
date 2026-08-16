@@ -254,11 +254,17 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .agenda-dialog-details .agenda-table:not(.speech-agenda-table) th:last-child { width: 40%; }
 .agenda-dialog-details .agenda-note { margin: 16px 0 0; }
 .assignment-grid { padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.assignment { min-height: 94px; padding: 16px 18px; background: #f3efe6; border-left: 4px solid var(--blue); }
+.assignment { min-height: 94px; padding: 16px 18px; color: inherit; text-align: left; background: #f3efe6; border: 0; border-left: 4px solid var(--blue); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; }
+.assignment:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(22,35,43,.12); }
+.assignment:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
 .assignment span { display: block; color: var(--muted); font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .assignment strong { display: block; margin-top: 8px; font-family: Georgia, serif; font-size: 23px; font-weight: 500; line-height: 1.15; }
 .assignment.pending { background: #fff0f1; border-left-color: var(--red-bright); }
 .assignment.pending span, .assignment.pending strong { color: var(--red); }
+.role-duty-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.role-duty-list li { display: grid; grid-template-columns: 92px 1fr; gap: 14px; padding: 15px; background: #f3efe6; border-left: 4px solid var(--gold); }
+.role-duty-list time { color: var(--red); font-size: 13px; font-weight: 800; }
+.role-duty-list span { font-size: 14px; line-height: 1.5; }
 .week-speeches-panel { margin-top: 0; }
 .week-speeches { padding: 20px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
 .week-speech { min-height: 150px; padding: 23px; background: var(--ink); color: var(--white); border-top: 4px solid var(--gold); cursor: help; }
@@ -414,6 +420,7 @@ footer p { text-align: right; }
   .assignment { min-height: 86px; padding: 14px 16px; }
   .assignment span { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
   .assignment strong { font-size: 21px; }
+  .role-duty-list li { grid-template-columns: 1fr; gap: 6px; }
   .week-speech { min-height: 132px; padding: 19px; }
   .week-speech .speaker { font-size: 16px; }
   .week-speech h4 { font-size: 23px; }
