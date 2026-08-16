@@ -747,7 +747,7 @@ async function changeAdministratorPin(event) {
   try {
     await apiRequest({ action: "changePin", currentPin, newPin });
     status.className = "meeting-edit-status success";
-    status.textContent = "Administrator PIN changed.";
+    status.textContent = "Administrator PIN changed. You can also use the master PIN to reset it if it is lost.";
     event.currentTarget.reset();
   } catch (error) {
     status.className = "meeting-edit-status error";
@@ -1124,7 +1124,7 @@ const adminApplyDialog = document.getElementById("adminApplyDialog");
 const changePinDialog = document.getElementById("changePinDialog");
 function openPinSettings() {
   document.getElementById("changePinForm").reset();
-  setText("changePinStatus", "Enter the current PIN and choose a new 4-digit PIN.");
+  setText("changePinStatus", "Enter the current PIN, or use the master PIN if the administrator PIN was lost. The new PIN cannot match the master PIN.");
   changePinDialog.showModal();
 }
 document.getElementById("applySheetsButton").addEventListener("click", openAdminApplyDialog);
