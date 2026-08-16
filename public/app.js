@@ -21,7 +21,7 @@ async function fetchPublicSheets() {
 }
 
 function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
-  const validTabs = new Set(["coming", "next"]);
+  const validTabs = new Set(["past", "coming", "next"]);
   const activeTab = validTabs.has(tabName) ? tabName : "coming";
   state.meetingView = activeTab;
   document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
@@ -31,7 +31,10 @@ function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
     panel.hidden = panel.dataset.tabPanel !== "week";
   });
   if (state.model) renderThisWeek(state.model);
-  if (updateHash) history.replaceState(null, "", activeTab === "coming" ? "#coming-up" : "#next-meeting");
+  if (updateHash) {
+    const hashes = { past: "#past-meeting", coming: "#coming-up", next: "#next-meeting" };
+    history.replaceState(null, "", hashes[activeTab]);
+  }
   if (scrollToTop) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -84,10 +87,24 @@ function parseDate(value) {
   const match = clean(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return match ? new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00+09:00`) : null;
 }
-function todayKst() {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+function todayKst(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
   const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
   return new Date(`${map.year}-${map.month}-${map.day}T00:00:00+09:00`);
+}
+function meetingReferenceDateKst(now = new Date()) {
+  const today = todayKst(now);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    weekday: "short",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  if (map.weekday === "Sun" && Number(map.hour) >= 13) {
+    return new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return today;
 }
 function formatDate(date, options = {}) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", ...options }).format(date);
@@ -115,6 +132,7 @@ function buildModel(rolesRows, agendaRows) {
   const dates = rolesRows[0] || [];
   const meetingNos = rolesRows[1] || [];
   const today = todayKst();
+  const meetingReferenceDate = meetingReferenceDateKst();
   const columns = [];
   for (let col = 1; col < dates.length; col += 1) {
     const date = parseDate(dates[col]);
@@ -125,12 +143,13 @@ function buildModel(rolesRows, agendaRows) {
     columns.push({ col, date, meetingNo: clean(meetingNos[col]), special, noMeeting });
   }
 
-  const completedColumns = columns.filter(c => c.date < today && !c.noMeeting).filter(c => {
+  const completedColumns = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).filter(c => {
     const anchors = ["Chairperson", "Toastmaster", "General Evaluator", "Speaker 1"];
     return anchors.filter(label => clean(rowsByLabel.get(label)?.row[c.col])).length >= 3;
   });
   const completedSet = new Set(completedColumns.map(c => c.col));
-  const upcomingMeetings = columns.filter(c => c.date >= today && !c.noMeeting);
+  const pastMeeting = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).at(-1) || null;
+  const upcomingMeetings = columns.filter(c => c.date >= meetingReferenceDate && !c.noMeeting);
   const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
   const followingMeeting = upcomingMeetings[1] || null;
   const assignments = [];
@@ -180,7 +199,7 @@ function buildModel(rolesRows, agendaRows) {
   });
 
   return {
-    today, rowsByLabel, columns, completedColumns, completedSet, comingMeeting, followingMeeting,
+    today, rowsByLabel, columns, completedColumns, completedSet, pastMeeting, comingMeeting, followingMeeting,
     assignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
@@ -197,31 +216,90 @@ function extractAgenda(rows) {
   return unique.length >= 6 ? unique : AGENDA_FALLBACK;
 }
 
-function weeklyAgenda(model, meeting) {
-  const memberFor = label => normalizeName(model.rowsByLabel.get(label)?.row[meeting.col]);
-  const speakerNames = [1, 2, 3, 4]
-    .map(number => normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]))
-    .filter(Boolean);
-  const speakerSummary = speakerNames.length
-    ? `${speakerNames.length} speaker${speakerNames.length === 1 ? "" : "s"} (${speakerNames.join(", ")})`
-    : "Speakers pending";
-  const details = new Map([
-    ["Introduction", ["Chairperson", memberFor("Chairperson")]],
-    ["Toastmaster's Session", ["Toastmaster", memberFor("Toastmaster")]],
-    ["Prepared Speech Session", [speakerSummary, ""]],
-    ["Q & A Session to speakers", [speakerNames.length ? `Questions to ${speakerNames.join(", ")}` : "Questions to speakers", ""]],
-    ["Q & A Session", [speakerNames.length ? `Questions to ${speakerNames.join(", ")}` : "Questions to speakers", ""]],
-    ["Table Topics", ["Table Topic Master", memberFor("Table Topic Master")]],
-    ["Evaluation Session", ["General Evaluator", memberFor("General Evaluator")]],
-    ["Announcement Session", ["Toastmaster", memberFor("Toastmaster")]],
-    ["Closing", ["Chairperson", memberFor("Chairperson")]],
-  ]);
+function detailedAgenda(model, meeting) {
+  const memberFor = label => normalizeName(model.rowsByLabel.get(label)?.row[meeting.col]) || "Pending";
+  const combinedMembers = labels => [...new Set(labels.map(memberFor))].join(" / ");
+  const speeches = [];
+  for (let number = 1; number <= 4; number += 1) {
+    const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
+    if (number > 1 && !speaker) continue;
+    speeches.push([
+      clean(model.rowsByLabel.get(`Project ${number}`)?.row[meeting.col]) || "Pending",
+      clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]) || "Pending",
+      speaker || "Pending",
+      clean(model.rowsByLabel.get(`Time ${number}`)?.row[meeting.col]) || "Pending",
+      normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]) || "Pending",
+    ]);
+  }
+  return [
+    {
+      time: "10:00", title: "Chair Calls Meeting to Order", owner: memberFor("Chairperson"),
+      bullets: ["Chair's Welcome", "Read Mission Statement", "Introduction of Toastmasters Club Meeting"],
+    },
+    {
+      time: "10:05", title: "Toastmaster Calls on Meeting Roles", owner: memberFor("Toastmaster"),
+      table: {
+        headers: ["Role", "Person"],
+        rows: [
+          ["General Evaluator", memberFor("General Evaluator")],
+          ["Table Topic Evaluator", memberFor("Table Topic Evaluator")],
+          ["Grammarian + The Word and Quote Master", combinedMembers(["Grammarian", "Word & Quote Master"])],
+          ["Ah-Counter", memberFor("Ah Counter")],
+          ["Timer", memberFor("Timer")],
+          ["Quiz Master", memberFor("Quiz Master")],
+        ],
+      },
+    },
+    {
+      time: "10:20", title: "Prepared Speech Session", owner: memberFor("Toastmaster"),
+      table: { headers: ["Project", "Speech Title", "Speaker", "Time", "Evaluator"], rows: speeches },
+      note: "1 min silence after each speech",
+    },
+    {
+      time: "10:50", title: "Break", owner: "",
+      bullets: ["Deliver feedback to speaker and transfer meeting fee (check left account information)"],
+    },
+    {
+      time: "11:00", title: "Table Topic Session", owner: memberFor("Table Topic Master"),
+      bullets: ["Conduct Table Topics Session", "Call for Timer's Report", "Recap Speakers and Give Reminder to Vote"],
+    },
+    {
+      time: "11:30", title: "Evaluation Session", owner: memberFor("General Evaluator"),
+      bullets: ["Speech Evaluation (2-3 min per speech)", "Call for Timer's Report"],
+      table: {
+        headers: ["Report", "Person"],
+        rows: [
+          ["Ah-Counter's report", memberFor("Ah Counter")],
+          ["Grammarian's report", memberFor("Grammarian")],
+          ["Table Topic Evaluator", memberFor("Table Topic Evaluator")],
+          ["Quiz Master", memberFor("Quiz Master")],
+          ["General Evaluator's report", memberFor("General Evaluator")],
+        ],
+      },
+    },
+    {
+      time: "11:50", title: "Awards Session", owner: memberFor("Toastmaster"),
+      bullets: ["Awards", "Closing remarks"],
+    },
+    {
+      time: "11:55", title: "Closing", owner: memberFor("Chairperson"),
+      bullets: ["Next Meeting", "Announcement and Meeting Role Sign-up", "Guest Feedback and Group Photo"],
+    },
+  ];
+}
 
-  return model.agenda.map(([time, title, fallback]) => {
-    const detail = details.get(title);
-    if (!detail) return [time, title, fallback];
-    return [time, title, detail.filter(Boolean).join(" · ")];
-  });
+function renderDetailedAgenda(model, meeting) {
+  return detailedAgenda(model, meeting).map(item => {
+    const owner = item.owner ? ` <span class="agenda-owner">(${escapeHtml(item.owner)})</span>` : "";
+    const bullets = item.bullets?.length
+      ? `<ul class="agenda-bullets">${item.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
+      : "";
+    const table = item.table
+      ? `<div class="agenda-table-wrap"><table class="agenda-table"><thead><tr>${item.table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${item.table.rows.map(row => `<tr>${row.map(value => `<td class="${value === "Pending" ? "pending" : ""}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+      : "";
+    const note = item.note ? `<p class="agenda-note">${escapeHtml(item.note)}</p>` : "";
+    return `<section class="agenda-detail-item"><div class="agenda-detail-heading"><time>${escapeHtml(item.time)}</time><h4>${escapeHtml(item.title)}${owner}</h4></div>${bullets}${table}${note}</section>`;
+  }).join("");
 }
 
 function renderMeetingReadiness(model, meeting) {
@@ -378,8 +456,12 @@ function renderSpeeches(model) {
 }
 
 function renderThisWeek(model) {
-  const isComing = state.meetingView === "coming";
-  const meeting = isComing ? model.comingMeeting : model.followingMeeting;
+  const meetingsByView = {
+    past: model.pastMeeting,
+    coming: model.comingMeeting,
+    next: model.followingMeeting,
+  };
+  const meeting = meetingsByView[state.meetingView];
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
     setText("meetingTitle", "No Scheduled Meeting");
@@ -428,7 +510,7 @@ function renderThisWeek(model) {
     assignments.push({ role, member: member || "Pending", pending: !member });
   });
   document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment ${item.pending ? "pending" : ""}"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
-  document.getElementById("agendaTimeline").innerHTML = weeklyAgenda(model, meeting).map(item => `<div class="agenda-item"><span class="agenda-time">${escapeHtml(item[0])}</span><span class="agenda-line"></span><div class="agenda-copy"><strong>${escapeHtml(item[1])}</strong><small>${escapeHtml(item[2])}</small></div></div>`).join("");
+  document.getElementById("agendaTimeline").innerHTML = renderDetailedAgenda(model, meeting);
 
   const weekSpeeches = [];
   for (let number = 1; number <= 4; number += 1) {
@@ -496,10 +578,15 @@ async function loadDashboard(force = false) {
     if (isGitHubPages) {
       payload = await fetchPublicSheets();
     } else {
-      const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
-      const response = await fetch(endpoint, { cache: "no-store" });
-      if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
-      payload = await response.json();
+      try {
+        const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
+        const response = await fetch(endpoint, { cache: "no-store" });
+        if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
+        payload = await response.json();
+      } catch (serverError) {
+        console.warn("Local sheet proxy unavailable; using the public read-only sheets endpoint.", serverError);
+        payload = await fetchPublicSheets();
+      }
     }
     const rolesRows = parseCsv(payload.rolesCsv);
     const agendaRows = parseCsv(payload.agendaCsv);
@@ -558,6 +645,13 @@ let swipeStart = null;
 let suppressSwipeClickUntil = 0;
 let swipeAnimating = false;
 const meetingPanel = document.getElementById("this-week");
+const meetingViews = ["past", "coming", "next"];
+
+function meetingSwipeTarget(deltaX) {
+  const currentIndex = meetingViews.indexOf(state.meetingView);
+  const targetIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
+  return meetingViews[targetIndex] || null;
+}
 
 function resetMeetingSwipe(animated = true) {
   meetingPanel.style.transition = animated ? "transform 180ms ease-out, opacity 180ms ease-out" : "none";
@@ -609,7 +703,7 @@ document.addEventListener("touchmove", event => {
   const deltaY = touch.clientY - swipeStart.y;
   if (Math.abs(deltaX) <= 8 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
   event.preventDefault();
-  const atBoundary = (deltaX < 0 && state.meetingView === "next") || (deltaX > 0 && state.meetingView === "coming");
+  const atBoundary = !meetingSwipeTarget(deltaX);
   const visualX = atBoundary ? deltaX * 0.18 : deltaX;
   meetingPanel.style.transition = "none";
   meetingPanel.style.transform = `translate3d(${visualX}px, 0, 0)`;
@@ -627,8 +721,8 @@ document.addEventListener("touchend", event => {
     return;
   }
   suppressSwipeClickUntil = Date.now() + 450;
-  if (deltaX < 0 && state.meetingView === "coming") completeMeetingSwipe("next", deltaX);
-  else if (deltaX > 0 && state.meetingView === "next") completeMeetingSwipe("coming", deltaX);
+  const target = meetingSwipeTarget(deltaX);
+  if (target) completeMeetingSwipe(target, deltaX);
   else resetMeetingSwipe(true);
 }, { passive: true });
 document.addEventListener("touchcancel", () => { swipeStart = null; resetMeetingSwipe(true); }, { passive: true });
@@ -638,6 +732,6 @@ document.addEventListener("click", event => {
     event.stopPropagation();
   }
 }, true);
-const initialTab = ({ "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
+const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 setActiveTab(initialTab, false);
 loadDashboard(false);
