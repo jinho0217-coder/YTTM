@@ -1271,7 +1271,10 @@ document.getElementById("meetingEditFields").addEventListener("click", event => 
   if (input) { input.value = ""; input.focus(); updateMeetingEditorState(); }
 });
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
-  button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
+  button.addEventListener("click", () => {
+    if (button.dataset.dashboardTab === "coming") animateReturnToComing();
+    else if (!swipeAnimating) setActiveTab(button.dataset.dashboardTab);
+  });
 });
 let swipeStart = null;
 let suppressSwipeClickUntil = 0;
@@ -1318,6 +1321,49 @@ function completeMeetingSwipe(targetOffset, deltaX) {
       }, 240);
     }));
   }, 195);
+}
+
+function animateReturnToComing() {
+  if (!state.model || state.meetingOffset === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setActiveTab("coming");
+    return;
+  }
+  if (swipeAnimating) return;
+  swipeAnimating = true;
+  swipeStart = null;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  const pageCount = Math.abs(state.meetingOffset);
+  const stepDuration = Math.max(26, Math.min(125, 1200 / pageCount));
+  const halfStep = Math.max(13, Math.floor(stepDuration / 2));
+  const direction = Math.sign(state.meetingOffset);
+  const advance = () => {
+    const nextOffset = state.meetingOffset + (state.meetingOffset > 0 ? -1 : 1);
+    meetingPanel.style.transition = `transform ${halfStep}ms ease-in, opacity ${halfStep}ms linear`;
+    meetingPanel.style.transform = `translate3d(${direction * window.innerWidth}px, 0, 0)`;
+    meetingPanel.style.opacity = "0.42";
+    window.setTimeout(() => {
+      setMeetingOffset(nextOffset, true, false);
+      meetingPanel.style.transition = "none";
+      meetingPanel.style.transform = `translate3d(${-direction * window.innerWidth}px, 0, 0)`;
+      meetingPanel.style.opacity = "0.42";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        meetingPanel.style.transition = `transform ${halfStep}ms ease-out, opacity ${halfStep}ms linear`;
+        meetingPanel.style.transform = "translate3d(0, 0, 0)";
+        meetingPanel.style.opacity = "1";
+        window.setTimeout(() => {
+          if (nextOffset !== 0) {
+            advance();
+            return;
+          }
+          meetingPanel.style.transition = "";
+          meetingPanel.style.transform = "";
+          meetingPanel.style.opacity = "";
+          swipeAnimating = false;
+        }, halfStep);
+      }));
+    }, halfStep);
+  };
+  advance();
 }
 
 document.addEventListener("touchstart", event => {
