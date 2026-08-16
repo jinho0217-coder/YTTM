@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260816-9" />
+    <link rel="stylesheet" href="./styles.css?v=20260816-11" />
   </head>
   <body>
     <div class="page-shell">
@@ -144,7 +144,14 @@
       </div>
       <div id="speechDialogDetails" class="speech-dialog-details"></div>
     </dialog>
+    <dialog id="agendaDetailsDialog" class="agenda-dialog" aria-labelledby="agendaDialogTitle">
+      <div class="missing-dialog-heading">
+        <div><p id="agendaDialogEyebrow">AGENDA</p><h2 id="agendaDialogTitle">Agenda details</h2></div>
+        <button type="button" id="closeAgendaDialog" class="dialog-close" aria-label="Close agenda details">&times;</button>
+      </div>
+      <div id="agendaDialogDetails" class="agenda-dialog-details"></div>
+    </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
-    <script src="./app.js?v=20260816-10" defer></script>
+    <script src="./app.js?v=20260816-11" defer></script>
   </body>
 </html>

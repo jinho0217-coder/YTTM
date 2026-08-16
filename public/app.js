@@ -233,11 +233,11 @@ function detailedAgenda(model, meeting) {
   }
   return [
     {
-      time: "10:00", title: "Chair Calls Meeting to Order", owner: memberFor("Chairperson"),
+      time: "10:00", title: "Chair Calls Meeting to Order", ownerRole: "Chairperson", owner: memberFor("Chairperson"),
       bullets: ["Chair's Welcome", "Read Mission Statement", "Introduction of Toastmasters Club Meeting"],
     },
     {
-      time: "10:05", title: "Toastmaster Calls on Meeting Roles", owner: memberFor("Toastmaster"),
+      time: "10:05", title: "Toastmaster Calls on Meeting Roles", ownerRole: "Toastmaster", owner: memberFor("Toastmaster"),
       table: {
         headers: ["Role", "Person"],
         rows: [
@@ -251,7 +251,7 @@ function detailedAgenda(model, meeting) {
       },
     },
     {
-      time: "10:20", title: "Prepared Speech Session", owner: memberFor("Toastmaster"),
+      time: "10:20", title: "Prepared Speech Session", ownerRole: "Toastmaster", owner: memberFor("Toastmaster"),
       table: { headers: ["Speaker", "Project", "Speech Title", "Time", "Evaluator"], rows: speeches },
       note: "1 min silence after each speech",
     },
@@ -260,11 +260,11 @@ function detailedAgenda(model, meeting) {
       bullets: ["Deliver feedback to speaker and transfer meeting fee (check left account information)"],
     },
     {
-      time: "11:00", title: "Table Topic Session", owner: memberFor("Table Topic Master"),
+      time: "11:00", title: "Table Topic Session", ownerRole: "Table Topic Master", owner: memberFor("Table Topic Master"),
       bullets: ["Conduct Table Topics Session", "Call for Timer's Report", "Recap Speakers and Give Reminder to Vote"],
     },
     {
-      time: "11:30", title: "Evaluation Session", owner: memberFor("General Evaluator"),
+      time: "11:30", title: "Evaluation Session", ownerRole: "General Evaluator", owner: memberFor("General Evaluator"),
       bullets: ["Speech Evaluation (2-3 min per speech)", "Call for Timer's Report"],
       table: {
         headers: ["Report", "Person"],
@@ -278,29 +278,46 @@ function detailedAgenda(model, meeting) {
       },
     },
     {
-      time: "11:50", title: "Awards Session", owner: memberFor("Toastmaster"),
+      time: "11:50", title: "Awards Session", ownerRole: "Toastmaster", owner: memberFor("Toastmaster"),
       bullets: ["Awards", "Closing remarks"],
     },
     {
-      time: "11:55", title: "Closing", owner: memberFor("Chairperson"),
+      time: "11:55", title: "Closing", ownerRole: "Chairperson", owner: memberFor("Chairperson"),
       bullets: ["Next Meeting", "Announcement and Meeting Role Sign-up", "Guest Feedback and Group Photo"],
     },
   ];
 }
 
-function renderDetailedAgenda(model, meeting) {
-  return detailedAgenda(model, meeting).map(item => {
-    const owner = item.owner ? ` <span class="agenda-owner">(${escapeHtml(item.owner)})</span>` : "";
-    const bullets = item.bullets?.length
-      ? `<ul class="agenda-bullets">${item.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
-      : "";
-    const isSpeechTable = item.table?.headers.length > 2;
-    const table = item.table
-      ? `<div class="agenda-table-wrap ${isSpeechTable ? "speech-agenda-table-wrap" : ""}"><table class="agenda-table ${isSpeechTable ? "speech-agenda-table" : ""}"><thead><tr>${item.table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${item.table.rows.map(row => `<tr>${row.map((value, index) => `<td data-label="${escapeHtml(item.table.headers[index])}" class="${value === "Pending" ? "pending" : ""}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
-      : "";
-    const note = item.note ? `<p class="agenda-note">${escapeHtml(item.note)}</p>` : "";
-    return `<section class="agenda-detail-item"><div class="agenda-detail-heading"><time>${escapeHtml(item.time)}</time><h4>${escapeHtml(item.title)}${owner}</h4></div>${bullets}${table}${note}</section>`;
+function agendaDetailHtml(item) {
+  const owner = item.owner ? `<p class="agenda-dialog-owner">${escapeHtml(item.ownerRole || "Host")} · <strong>${escapeHtml(item.owner)}</strong></p>` : "";
+  const bullets = item.bullets?.length
+    ? `<ul class="agenda-bullets">${item.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
+    : "";
+  const isSpeechTable = item.table?.headers.length > 2;
+  const table = item.table
+    ? `<div class="agenda-table-wrap ${isSpeechTable ? "speech-agenda-table-wrap" : ""}"><table class="agenda-table ${isSpeechTable ? "speech-agenda-table" : ""}"><thead><tr>${item.table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${item.table.rows.map(row => `<tr>${row.map((value, index) => `<td data-label="${escapeHtml(item.table.headers[index])}" class="${value === "Pending" ? "pending" : ""}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+    : "";
+  const note = item.note ? `<p class="agenda-note">${escapeHtml(item.note)}</p>` : "";
+  return `${owner}${bullets}${table}${note}`;
+}
+
+function renderCompactAgenda(model, meeting) {
+  const items = detailedAgenda(model, meeting);
+  const container = document.getElementById("agendaTimeline");
+  container.innerHTML = items.map((item, index) => {
+    const summary = item.owner ? `${item.ownerRole || "Host"} · ${item.owner}` : "Open session details";
+    return `<button type="button" class="agenda-item agenda-item-button" data-agenda-index="${index}" aria-haspopup="dialog"><span class="agenda-time">${escapeHtml(item.time)}</span><span class="agenda-line"></span><span class="agenda-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(summary)}</small></span></button>`;
   }).join("");
+  container.querySelectorAll("[data-agenda-index]").forEach(button => {
+    button.addEventListener("click", () => showAgendaDetails(items[Number(button.dataset.agendaIndex)]));
+  });
+}
+
+function showAgendaDetails(item) {
+  setText("agendaDialogEyebrow", item.time);
+  setText("agendaDialogTitle", item.title);
+  document.getElementById("agendaDialogDetails").innerHTML = agendaDetailHtml(item);
+  document.getElementById("agendaDetailsDialog").showModal();
 }
 
 function renderMeetingReadiness(model, meeting) {
@@ -511,7 +528,7 @@ function renderThisWeek(model) {
     assignments.push({ role, member: member || "Pending", pending: !member });
   });
   document.getElementById("weekAssignments").innerHTML = assignments.length ? assignments.map(item => `<div class="assignment ${item.pending ? "pending" : ""}"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
-  document.getElementById("agendaTimeline").innerHTML = renderDetailedAgenda(model, meeting);
+  renderCompactAgenda(model, meeting);
 
   const weekSpeeches = [];
   for (let number = 1; number <= 4; number += 1) {
@@ -639,6 +656,14 @@ speechDialog.addEventListener("click", event => {
   if (speechDialog.open) speechDialog.close();
 });
 speechDialog.addEventListener("close", hideTooltip);
+const agendaDialog = document.getElementById("agendaDetailsDialog");
+document.getElementById("closeAgendaDialog").addEventListener("click", event => {
+  event.stopPropagation();
+  agendaDialog.close();
+});
+agendaDialog.addEventListener("click", event => {
+  if (agendaDialog.open) agendaDialog.close();
+});
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
 });
