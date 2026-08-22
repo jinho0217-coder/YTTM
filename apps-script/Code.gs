@@ -13,6 +13,7 @@ const EDITABLE_FIELDS = {
   roles: [
     "Chairperson", "Toastmaster", "General Evaluator", "Table Topic Master", "Timer",
     "Ah Counter", "Grammarian", "Word & Quote Master", "Quiz Master", "Table Topic Evaluator",
+    "Best Speaker", "Best evaluator", "Best table topic speaker",
   ],
   speeches: [
     "Speaker 1", "Project 1", "Title 1", "Time 1", "Evaluator 1",

@@ -618,12 +618,16 @@ function editFieldHtml(meeting, label) {
 
 let meetingLockTimer = null;
 
+function activeEditApiSection() {
+  return state.editSection === "awards" ? "roles" : state.editSection;
+}
+
 function updateMeetingFieldLocks() {
   clearInterval(meetingLockTimer);
   const meeting = state.editMeeting;
   if (!meeting) return;
   const meetingDate = sheetDateValue(meeting.date);
-  const locks = state.sharedDrafts.locks?.[meetingDate]?.[state.editSection] || {};
+  const locks = state.sharedDrafts.locks?.[meetingDate]?.[activeEditApiSection()] || {};
   const status = document.getElementById("meetingEditStatus");
   const refreshLocks = () => {
     const now = Date.now();
@@ -727,8 +731,9 @@ async function saveMeetingEditor(event) {
     .filter(input => input.value.trim() !== input.dataset.initialValue)
     .map(input => [input.dataset.editField, input.value.trim()]));
   const meetingDate = sheetDateValue(state.editMeeting.date);
+  const apiSection = activeEditApiSection();
   const baseValues = Object.fromEntries(Object.keys(updates).map(label => [label, state.sheetBaseValues[meetingDate]?.[label] || ""]));
-  const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.sharedDrafts.fieldVersions?.[`${meetingDate}|${state.editSection}|${label}`] || 0)]));
+  const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.sharedDrafts.fieldVersions?.[`${meetingDate}|${apiSection}|${label}`] || 0)]));
   saveButton.disabled = true;
   setMeetingSaveBusy(true);
   status.className = "meeting-edit-status";
@@ -737,7 +742,7 @@ async function saveMeetingEditor(event) {
     const result = await apiRequest({
       action: "saveDraft",
       meetingDate,
-      section: state.editSection,
+      section: apiSection,
       updates,
       baseValues,
       fieldVersions,
@@ -765,7 +770,9 @@ async function saveMeetingEditor(event) {
       return;
     }
     status.className = "meeting-edit-status error";
-    status.textContent = `Unable to save: ${error.message}`;
+    status.textContent = /Unsupported edit section|Field is not allowed/i.test(error.message)
+      ? "Unable to save awards: the Google Apps Script deployment is outdated. Deploy the latest apps-script/Code.gs as a new web app version, then try again."
+      : `Unable to save: ${error.message}`;
   } finally {
     setMeetingSaveBusy(false);
     if (document.getElementById("meetingEditDialog").open) updateMeetingEditorState();
