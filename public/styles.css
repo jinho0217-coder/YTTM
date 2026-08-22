@@ -408,7 +408,7 @@ footer p { text-align: right; }
 .guest-guide-highlight { color: var(--white); background: var(--ink) !important; border-color: var(--ink) !important; }
 .guest-guide-highlight h3 { color: #edc15e; }
 .guest-guide-highlight p { color: rgba(255,255,255,.82); }
-.guest-guide-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.guest-guide-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .guest-guide-link { display: block; width: 100%; padding: 0; color: inherit; text-decoration: none; background: transparent; border: 0; cursor: pointer; }
 .guest-guide-links figure { height: 100%; margin: 0; padding: 16px; text-align: center; background: var(--white); border: 1px solid var(--line); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .guest-guide-link:hover figure, .guest-guide-link:focus-visible figure { transform: translateY(-4px); border-color: var(--blue); box-shadow: 0 12px 28px rgba(20,30,34,.14); }
