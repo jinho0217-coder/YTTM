@@ -1242,7 +1242,8 @@ guestGuideDialog.addEventListener("click", event => {
 
 const roleGuidesDialog = document.getElementById("roleGuidesDialog");
 const rolePdfDialog = document.getElementById("rolePdfDialog");
-const rolePdfFrame = document.getElementById("rolePdfFrame");
+const rolePdfPages = document.getElementById("rolePdfPages");
+const rolePdfOriginalLink = document.getElementById("rolePdfOriginalLink");
 document.getElementById("roleGuidesButton").addEventListener("click", () => {
   if (!roleGuidesDialog.open) roleGuidesDialog.showModal();
 });
@@ -1253,20 +1254,32 @@ roleGuidesDialog.addEventListener("click", event => {
 document.querySelectorAll("[data-role-guide]").forEach(button => {
   button.addEventListener("click", () => {
     setText("rolePdfTitle", button.dataset.roleTitle);
-    rolePdfFrame.src = button.dataset.roleGuide;
+    const guide = button.dataset.roleGuide;
+    const pageCount = Number(button.dataset.rolePages || 1);
+    rolePdfPages.innerHTML = Array.from({ length: pageCount }, (_, index) => {
+      const page = index + 1;
+      const loading = page === 1 ? "eager" : "lazy";
+      return `<figure><img src="./role-guides/pages/${escapeHtml(guide)}-page-${page}.png" alt="${escapeHtml(button.dataset.roleTitle)} page ${page} of ${pageCount}" loading="${loading}"><figcaption>Page ${page} / ${pageCount}</figcaption></figure>`;
+    }).join("");
+    rolePdfOriginalLink.href = `./role-guides/${guide}.pdf`;
     roleGuidesDialog.close();
     rolePdfDialog.showModal();
+    rolePdfPages.scrollTop = 0;
   });
 });
 function closeRolePdf() {
   rolePdfDialog.close();
-  rolePdfFrame.removeAttribute("src");
+  rolePdfPages.replaceChildren();
+  rolePdfOriginalLink.removeAttribute("href");
 }
 document.getElementById("closeRolePdfDialog").addEventListener("click", closeRolePdf);
 rolePdfDialog.addEventListener("click", event => {
   if (event.target === rolePdfDialog) closeRolePdf();
 });
-rolePdfDialog.addEventListener("close", () => rolePdfFrame.removeAttribute("src"));
+rolePdfDialog.addEventListener("close", () => {
+  rolePdfPages.replaceChildren();
+  rolePdfOriginalLink.removeAttribute("href");
+});
 
 let sharedDraftPollBusy = false;
 async function pollSharedDrafts() {

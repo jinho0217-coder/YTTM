@@ -274,12 +274,12 @@
           <button type="button" id="closeRoleGuidesDialog" class="dialog-close" aria-label="Close role guides">&times;</button>
         </div>
         <div class="role-guide-list">
-          <button type="button" data-role-guide="./role-guides/toastmaster.pdf" data-role-title="Toastmaster"><span>01</span><strong>Toastmaster</strong><small>Script and checklist</small></button>
-          <button type="button" data-role-guide="./role-guides/timer.pdf" data-role-title="Timer"><span>02</span><strong>Timer</strong><small>Script and log</small></button>
-          <button type="button" data-role-guide="./role-guides/topicsmaster.pdf" data-role-title="Topicsmaster"><span>03</span><strong>Topicsmaster</strong><small>Script and log</small></button>
-          <button type="button" data-role-guide="./role-guides/ah-counter.pdf" data-role-title="Ah-Counter"><span>04</span><strong>Ah-Counter</strong><small>Script and log</small></button>
-          <button type="button" data-role-guide="./role-guides/general-evaluator.pdf" data-role-title="General Evaluator"><span>05</span><strong>General Evaluator</strong><small>Checklist</small></button>
-          <button type="button" data-role-guide="./role-guides/grammarian.pdf" data-role-title="Grammarian"><span>06</span><strong>Grammarian</strong><small>Script and log</small></button>
+          <button type="button" data-role-guide="toastmaster" data-role-pages="1" data-role-title="Toastmaster"><span>01</span><strong>Toastmaster</strong><small>Script and checklist</small></button>
+          <button type="button" data-role-guide="timer" data-role-pages="2" data-role-title="Timer"><span>02</span><strong>Timer</strong><small>Script and log</small></button>
+          <button type="button" data-role-guide="topicsmaster" data-role-pages="1" data-role-title="Topicsmaster"><span>03</span><strong>Topicsmaster</strong><small>Script and log</small></button>
+          <button type="button" data-role-guide="ah-counter" data-role-pages="1" data-role-title="Ah-Counter"><span>04</span><strong>Ah-Counter</strong><small>Script and log</small></button>
+          <button type="button" data-role-guide="general-evaluator" data-role-pages="2" data-role-title="General Evaluator"><span>05</span><strong>General Evaluator</strong><small>Checklist</small></button>
+          <button type="button" data-role-guide="grammarian" data-role-pages="2" data-role-title="Grammarian"><span>06</span><strong>Grammarian</strong><small>Script and log</small></button>
         </div>
         <p class="role-guides-dismiss">팝업 바깥을 누르면 닫힙니다.</p>
       </div>
@@ -288,13 +288,13 @@
       <div class="role-pdf-shell">
         <div class="role-pdf-heading">
           <div><p class="eyebrow">ROLE GUIDE PDF</p><h2 id="rolePdfTitle">Role guide</h2></div>
-          <button type="button" id="closeRolePdfDialog" class="dialog-close" aria-label="Close PDF viewer">&times;</button>
+          <div class="role-pdf-actions"><a id="rolePdfOriginalLink" target="_blank" rel="noopener noreferrer">원본 PDF 열기 ↗</a><button type="button" id="closeRolePdfDialog" class="dialog-close" aria-label="Close PDF viewer">&times;</button></div>
         </div>
-        <iframe id="rolePdfFrame" title="Role guide PDF" loading="lazy"></iframe>
+        <div id="rolePdfPages" class="role-pdf-pages" aria-live="polite"></div>
       </div>
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20260822-4" defer></script>
+    <script src="./app.js?v=20260822-5" defer></script>
   </body>
 </html>
