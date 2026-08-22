@@ -277,11 +277,18 @@ function doPost(event) {
       const drafts = readDrafts();
       const conflicts = [];
       const writes = [];
+      const allEntries = [];
+      const requestedSelections = Array.isArray(request.selections) ? request.selections : null;
+      const selectedKeys = requestedSelections === null ? null : new Set(requestedSelections.map(item =>
+        fieldKey(String(item?.meetingDate || ""), String(item?.section || ""), String(item?.label || ""))));
       Object.entries(drafts.meetings || {}).forEach(([meetingDate, sections]) => {
         const target = requireAllowedMeeting(context, meetingDate);
         Object.entries(sections || {}).forEach(([section, rawUpdates]) => {
           const updates = validatedUpdates(section, rawUpdates);
           Object.keys(updates).forEach(label => {
+            const key = fieldKey(meetingDate, section, label);
+            allEntries.push({ meetingDate, section, label, value: updates[label] });
+            if (selectedKeys && !selectedKeys.has(key)) return;
             const row = context.rowByLabel.get(label);
             if (!row) throw new Error(`Row was not found: ${label}`);
             const currentValue = String(context.sheet.getRange(row, target.column).getValue() ?? "").trim();
@@ -319,8 +326,13 @@ function doPost(event) {
         });
       });
       const saved = writeDrafts(drafts);
-      appendAudit(writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })));
-      return operationResponse(request, { ok: true, applied: true, revision: saved.revision, updated: writes.length });
+      const appliedKeys = new Set(writes.map(item => fieldKey(item.meetingDate, item.section, item.label)));
+      const discarded = allEntries.filter(item => !appliedKeys.has(fieldKey(item.meetingDate, item.section, item.label)));
+      appendAudit([
+        ...writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })),
+        ...discarded.map(item => ({ at: new Date().toISOString(), action: "discard", meetingDate: item.meetingDate, section: item.section, label: item.label, value: item.value })),
+      ]);
+      return operationResponse(request, { ok: true, applied: true, revision: saved.revision, updated: writes.length, discarded: discarded.length });
     }
 
     if (request.action === "changePin") {

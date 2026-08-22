@@ -782,27 +782,49 @@ async function saveMeetingEditor(event) {
 function openAdminApplyDialog() {
   const entries = sharedDraftEntries();
   if (!entries.length) return;
+  state.adminApplyEntries = entries;
   const meetings = new Set(entries.map(entry => entry.meetingDate)).size;
   setText("adminApplySummary", `${entries.length} shared change${entries.length === 1 ? "" : "s"} across ${meetings} meeting${meetings === 1 ? "" : "s"} will be written to Google Sheets.`);
   const uniqueLabels = [...new Set(entries.map(entry => entry.label))];
   const compactLabels = uniqueLabels.slice(0, 2).join(", ");
   const remaining = Math.max(0, uniqueLabels.length - 2);
   setText("adminApplyCompact", `${compactLabels}${remaining ? ` +${remaining}` : ""}`);
-  document.getElementById("adminApplyList").innerHTML = entries.map(entry => `
-    <div class="admin-apply-item">
+  document.getElementById("adminApplyList").innerHTML = entries.map((entry, index) => `
+    <label class="admin-apply-item">
+      <input type="checkbox" data-apply-change="${index}" checked>
+      <span class="admin-apply-toggle" aria-hidden="true"></span>
       <time>${escapeHtml(entry.meetingDate)}</time>
       <strong>${escapeHtml(entry.section)} · ${escapeHtml(entry.label)}</strong>
-      <span>${escapeHtml(entry.value || "(clear value)")}</span>
-    </div>`).join("");
-  document.getElementById("adminApplyDetails").open = false;
+      <span class="admin-apply-value">${escapeHtml(entry.value || "(clear value)")}</span>
+    </label>`).join("");
+  document.getElementById("adminApplyDetails").open = true;
   const status = document.getElementById("adminApplyStatus");
   status.className = "meeting-edit-status";
-  status.textContent = "Enter the administrator PIN to apply all shared changes.";
+  status.textContent = "Selected changes will be applied. Unselected changes will be discarded and restored from Google Sheets.";
   document.getElementById("adminApplyPin").value = "";
   const applyButton = document.getElementById("confirmApplySheets");
   applyButton.dataset.force = "";
-  applyButton.textContent = "Apply changes";
+  updateAdminApplySelection();
   document.getElementById("adminApplyDialog").showModal();
+}
+
+function selectedAdminApplyEntries() {
+  return [...document.querySelectorAll("[data-apply-change]:checked")]
+    .map(input => state.adminApplyEntries?.[Number(input.dataset.applyChange)])
+    .filter(Boolean);
+}
+
+function updateAdminApplySelection() {
+  const total = state.adminApplyEntries?.length || 0;
+  const selected = selectedAdminApplyEntries().length;
+  const discarded = total - selected;
+  setText("adminApplyCompact", `${selected} of ${total} selected`);
+  setText("adminApplySummary", selected
+    ? `${selected} selected change${selected === 1 ? "" : "s"} will be written to Google Sheets.${discarded ? ` ${discarded} unselected change${discarded === 1 ? "" : "s"} will be discarded and restored from the sheet.` : ""}`
+    : `All ${total} pending change${total === 1 ? "" : "s"} will be discarded and restored from Google Sheets.`);
+  const button = document.getElementById("confirmApplySheets");
+  button.dataset.force = "";
+  button.textContent = selected ? `Apply ${selected} selected` : "Discard all changes";
 }
 
 async function applySharedDrafts(event) {
@@ -810,6 +832,7 @@ async function applySharedDrafts(event) {
   const pin = document.getElementById("adminApplyPin").value;
   const status = document.getElementById("adminApplyStatus");
   const button = document.getElementById("confirmApplySheets");
+  const selectedEntries = selectedAdminApplyEntries();
   if (!/^\d{4}$/.test(pin)) {
     status.className = "meeting-edit-status error";
     status.textContent = "Enter a 4-digit administrator PIN.";
@@ -817,11 +840,14 @@ async function applySharedDrafts(event) {
   }
   button.disabled = true;
   status.className = "meeting-edit-status";
-  status.textContent = "Applying the shared draft to Google Sheets…";
+  status.textContent = selectedEntries.length
+    ? `Applying ${selectedEntries.length} selected change${selectedEntries.length === 1 ? "" : "s"} to Google Sheets…`
+    : "Discarding all shared changes and reloading Google Sheets…";
   try {
-    const result = await apiRequest({ action: "applyDrafts", pin, force: button.dataset.force === "true" });
+    const selections = selectedEntries.map(({ meetingDate, section, label }) => ({ meetingDate, section, label }));
+    const result = await apiRequest({ action: "applyDrafts", pin, force: button.dataset.force === "true", selections });
     status.className = "meeting-edit-status success";
-    status.textContent = `Applied ${result.updated} field${result.updated === 1 ? "" : "s"} to Google Sheets.`;
+    status.textContent = `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
     await loadDashboard(true);
     setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
   } catch (error) {
@@ -1371,6 +1397,9 @@ document.getElementById("applySheetsButton").addEventListener("click", openAdmin
 document.getElementById("adminSettingsButton").addEventListener("click", openPinSettings);
 document.getElementById("closeAdminApplyDialog").addEventListener("click", () => adminApplyDialog.close());
 document.getElementById("adminApplyForm").addEventListener("submit", applySharedDrafts);
+document.getElementById("adminApplyList").addEventListener("change", event => {
+  if (event.target.matches("[data-apply-change]")) updateAdminApplySelection();
+});
 document.getElementById("openChangePinDialog").addEventListener("click", openPinSettings);
 document.getElementById("closeChangePinDialog").addEventListener("click", () => changePinDialog.close());
 document.getElementById("changePinForm").addEventListener("submit", changeAdministratorPin);
