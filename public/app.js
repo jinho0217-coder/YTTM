@@ -1283,6 +1283,34 @@ rolePdfZoomButton.addEventListener("click", () => {
   rolePdfZoomButton.setAttribute("aria-pressed", String(zoomed));
   if (!zoomed) rolePdfPages.scrollLeft = 0;
 });
+let rolePdfDrag = null;
+rolePdfPages.addEventListener("touchstart", event => {
+  if (!rolePdfPages.classList.contains("is-zoomed") || event.touches.length !== 1) {
+    rolePdfDrag = null;
+    return;
+  }
+  const touch = event.touches[0];
+  rolePdfDrag = {
+    x: touch.clientX,
+    y: touch.clientY,
+    scrollLeft: rolePdfPages.scrollLeft,
+    scrollTop: rolePdfPages.scrollTop,
+  };
+}, { passive: true });
+rolePdfPages.addEventListener("touchmove", event => {
+  if (!rolePdfDrag || event.touches.length !== 1 || !rolePdfPages.classList.contains("is-zoomed")) {
+    if (event.touches.length !== 1) rolePdfDrag = null;
+    return;
+  }
+  const touch = event.touches[0];
+  event.preventDefault();
+  rolePdfPages.scrollLeft = rolePdfDrag.scrollLeft + rolePdfDrag.x - touch.clientX;
+  rolePdfPages.scrollTop = rolePdfDrag.scrollTop + rolePdfDrag.y - touch.clientY;
+}, { passive: false });
+rolePdfPages.addEventListener("touchend", event => {
+  if (event.touches.length === 0) rolePdfDrag = null;
+}, { passive: true });
+rolePdfPages.addEventListener("touchcancel", () => { rolePdfDrag = null; }, { passive: true });
 rolePdfDialog.addEventListener("click", event => {
   if (event.target === rolePdfDialog) closeRolePdf();
 });
