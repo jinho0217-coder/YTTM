@@ -432,9 +432,11 @@ footer p { text-align: right; }
 .role-pdf-actions a { padding: 10px 13px; color: var(--blue); border: 1px solid var(--blue); font-size: 12px; font-weight: 800; text-decoration: none; }
 .role-pdf-actions a:hover, .role-pdf-actions a:focus-visible { color: var(--white); background: var(--blue); outline: 0; }
 .role-pdf-pages { min-height: 0; padding: 18px; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y pinch-zoom; -webkit-overflow-scrolling: touch; background: #d9dde0; }
+.role-pdf-pages.is-zoomed { touch-action: pinch-zoom; cursor: grab; }
+.role-pdf-pages.is-zoomed.is-dragging { cursor: grabbing; }
 .role-pdf-pages figure { width: min(100%, 860px); margin: 0 auto 18px; background: var(--white); box-shadow: 0 7px 24px rgba(17,31,37,.22); }
 .role-pdf-pages figure:last-child { margin-bottom: 0; }
-.role-pdf-pages img { display: block; width: 100%; max-width: none; height: auto; touch-action: pan-x pan-y pinch-zoom; user-select: none; -webkit-user-drag: none; transition: width .18s ease; }
+.role-pdf-pages img { display: block; width: 100%; max-width: none; height: auto; user-select: none; -webkit-user-drag: none; transition: width .18s ease; }
 .role-pdf-pages figcaption { padding: 8px 12px; color: var(--muted); background: #f8f8f8; border-top: 1px solid var(--line); font-size: 11px; text-align: center; }
 .guest-guide-contact { padding: 18px 20px; color: var(--red) !important; background: #fbecef; border-left: 4px solid var(--red); font-weight: 700; }
 .tooltip { position: fixed; z-index: 100; max-width: 330px; padding: 13px 15px; color: var(--white); background: rgba(12,22,27,.97); border: 1px solid rgba(255,255,255,.15); box-shadow: 0 14px 40px rgba(0,0,0,.25); pointer-events: none; opacity: 0; transform: translateY(6px); transition: opacity .12s, transform .12s; font-size: 11px; white-space: pre-line; }
