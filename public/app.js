@@ -809,7 +809,7 @@ function openAdminApplyDialog() {
 }
 
 function selectedAdminApplyEntries() {
-  return [...document.querySelectorAll("[data-apply-change]:checked")]
+  return [...document.querySelectorAll("#adminApplyList [data-apply-change]:checked")]
     .map(input => state.adminApplyEntries?.[Number(input.dataset.applyChange)])
     .filter(Boolean);
 }
@@ -845,12 +845,27 @@ async function applySharedDrafts(event) {
     : "Discarding all shared changes and reloading Google Sheets…";
   try {
     const selections = selectedEntries.map(({ meetingDate, section, label }) => ({ meetingDate, section, label }));
-    const result = await apiRequest({ action: "applyDrafts", pin, force: button.dataset.force === "true", selections });
+    const result = await apiRequest({
+      action: "applyDrafts",
+      pin,
+      force: button.dataset.force === "true",
+      selectionMode: "explicit",
+      selections,
+      totalDrafts: state.adminApplyEntries?.length || 0,
+      draftRevision: state.sharedDrafts.revision,
+    });
     status.className = "meeting-edit-status success";
     status.textContent = `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
     await loadDashboard(true);
     setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
   } catch (error) {
+    if (error.result?.code === "DRAFT_CHANGED") {
+      status.className = "meeting-edit-status warning";
+      status.textContent = "The pending changes changed before approval. Reloading the latest list from Google Sheets…";
+      await loadDashboard(true);
+      setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
+      return;
+    }
     if (error.result?.code === "SHEET_CHANGED") {
       const conflicts = error.result.conflicts || [];
       status.className = "meeting-edit-status warning";

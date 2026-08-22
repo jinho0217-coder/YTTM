@@ -275,12 +275,22 @@ function doPost(event) {
     if (request.action === "applyDrafts") {
       requirePin(request.pin);
       const drafts = readDrafts();
+      const expectedRevision = Number(request.draftRevision);
+      if (!Number.isInteger(expectedRevision) || expectedRevision !== Number(drafts.revision || 0)) {
+        return operationResponse(request, { ok: false, code: "DRAFT_CHANGED", error: "The pending changes changed before approval. Reload the page and review them again.", revision: drafts.revision });
+      }
       const conflicts = [];
       const writes = [];
       const allEntries = [];
-      const requestedSelections = Array.isArray(request.selections) ? request.selections : null;
-      const selectedKeys = requestedSelections === null ? null : new Set(requestedSelections.map(item =>
+      if (request.selectionMode !== "explicit" || !Array.isArray(request.selections)) {
+        throw new Error("A complete explicit selection is required. No changes were applied.");
+      }
+      const requestedSelections = request.selections;
+      const selectedKeys = new Set(requestedSelections.map(item =>
         fieldKey(String(item?.meetingDate || ""), String(item?.section || ""), String(item?.label || ""))));
+      if (selectedKeys.size !== requestedSelections.length || [...selectedKeys].some(key => /^\||\|\||\|$/.test(key))) {
+        throw new Error("The selected change list is invalid. No changes were applied.");
+      }
       Object.entries(drafts.meetings || {}).forEach(([meetingDate, sections]) => {
         const target = requireAllowedMeeting(context, meetingDate);
         Object.entries(sections || {}).forEach(([section, rawUpdates]) => {
@@ -288,7 +298,7 @@ function doPost(event) {
           Object.keys(updates).forEach(label => {
             const key = fieldKey(meetingDate, section, label);
             allEntries.push({ meetingDate, section, label, value: updates[label] });
-            if (selectedKeys && !selectedKeys.has(key)) return;
+            if (!selectedKeys.has(key)) return;
             const row = context.rowByLabel.get(label);
             if (!row) throw new Error(`Row was not found: ${label}`);
             const currentValue = String(context.sheet.getRange(row, target.column).getValue() ?? "").trim();
@@ -298,6 +308,9 @@ function doPost(event) {
           });
         });
       });
+      if (Number(request.totalDrafts) !== allEntries.length || [...selectedKeys].some(key => !allEntries.some(item => fieldKey(item.meetingDate, item.section, item.label) === key))) {
+        return operationResponse(request, { ok: false, code: "DRAFT_CHANGED", error: "The pending change list no longer matches this approval. Reload the page and review it again.", revision: drafts.revision });
+      }
       if (conflicts.length && request.force !== true) {
         return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed after the shared draft was created.", conflicts });
       }
