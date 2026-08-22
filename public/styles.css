@@ -39,7 +39,7 @@ a { color: inherit; }
   border-bottom: 1px solid rgba(255,255,255,.11);
   backdrop-filter: blur(12px);
 }
-.brand { display: flex; gap: 12px; align-items: center; text-decoration: none; letter-spacing: .08em; }
+.brand { display: flex; gap: 12px; align-items: center; text-decoration: none; letter-spacing: .08em; cursor: pointer; }
 .brand-logo { width: 48px; height: 48px; padding: 3px; object-fit: contain; background: var(--white); border-radius: 50%; }
 .brand strong, .brand small { display: block; line-height: 1.08; }
 .brand strong { font-size: 13px; }
@@ -244,6 +244,18 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .week-stack { display: grid; gap: 18px; }
 .week-stack .panel-title h3 { font-size: 24px; }
 .week-stack .panel-title span { font-size: 13px; }
+.meeting-awards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.meeting-award { min-height: 142px; padding: 24px 22px; color: var(--white); text-align: left; background: var(--ink); border: 0; border-top: 4px solid var(--gold); border-right: 1px solid rgba(255,255,255,.14); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.meeting-award:last-child { border-right: 0; }
+.meeting-award:hover, .meeting-award:focus-visible { position: relative; z-index: 2; transform: translateY(-4px); box-shadow: 0 14px 30px rgba(22,35,43,.16); outline: 0; }
+.meeting-award span { display: block; color: #edc15e; font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.meeting-award strong { display: block; margin-top: 18px; font-family: Georgia, serif; font-size: 27px; font-weight: 500; line-height: 1.2; }
+.meeting-award.pending { color: var(--ink); background: var(--white); border-top-color: var(--line); border-right-color: var(--line); box-shadow: none; }
+.meeting-award.pending span { color: var(--muted); }
+.meeting-award.pending strong { color: var(--ink); }
+.award-detail-row { display: flex; align-items: center; gap: 12px; }
+.award-detail-value { flex: 1; padding: 28px 24px; color: #6f5017; background: linear-gradient(145deg, #fffdf8, #f4ead2); border-left: 5px solid var(--gold); font-family: Georgia, serif; font-size: 30px; }
+.award-detail-value.pending { color: var(--red); background: #fff0f1; border-left-color: var(--red-bright); }
 .agenda-panel, .agenda-timeline { min-width: 0; }
 .agenda-timeline { padding: 18px 23px 24px; }
 .agenda-detail-item { padding: 24px 0 26px; border-bottom: 1px solid var(--line); }
@@ -352,7 +364,7 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .assignment strong { display: block; margin-top: 8px; font-family: Georgia, serif; font-size: 23px; font-weight: 500; line-height: 1.15; }
 .assignment.pending { background: #fff0f1; border-left-color: var(--red-bright); }
 .assignment.pending span, .assignment.pending strong { color: var(--red); }
-.meeting-context-item.long-pressing, .assignment.long-pressing, .week-speech.long-pressing { transform: scale(.975); box-shadow: 0 0 0 3px rgba(176,31,52,.28), 0 12px 26px rgba(18,32,39,.18); transition-duration: .12s; }
+.meeting-context-item.long-pressing, .assignment.long-pressing, .week-speech.long-pressing, .meeting-award.long-pressing { transform: scale(.975); box-shadow: 0 0 0 3px rgba(176,31,52,.28), 0 12px 26px rgba(18,32,39,.18); transition-duration: .12s; }
 .role-duty-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .role-duty-list li { display: grid; grid-template-columns: 92px 1fr; gap: 14px; padding: 15px; background: #f3efe6; border-left: 4px solid var(--gold); }
 .role-duty-list time { color: var(--red); font-size: 13px; font-weight: 800; }
@@ -370,6 +382,53 @@ footer { min-height: 130px; padding: 36px clamp(24px, 5vw, 78px); color: rgba(25
 footer strong, footer span { display: block; }
 footer strong { color: var(--white); font-family: Georgia, serif; font-size: 22px; }
 footer p { text-align: right; }
+.guest-guide-dialog { width: min(920px, calc(100vw - 32px)); max-height: min(88vh, 900px); padding: 0; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(16,36,43,.28); }
+.guest-guide-dialog::backdrop { background: rgba(10,28,35,.7); backdrop-filter: blur(4px); }
+.guest-guide-shell { max-height: min(88vh, 900px); overflow-y: auto; overscroll-behavior: contain; }
+.guest-guide-heading { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 26px 30px 20px; background: rgba(251,248,242,.96); border-bottom: 1px solid var(--line); backdrop-filter: blur(10px); }
+.guest-guide-heading .eyebrow { margin: 0 0 7px; color: var(--red); }
+.guest-guide-heading h2 { margin: 0; font-family: Georgia, serif; font-size: clamp(28px, 4vw, 42px); font-weight: 400; line-height: 1.05; }
+.guest-guide-content { display: grid; gap: 18px; padding: 26px 30px 34px; }
+.guest-guide-content section { padding: 22px 24px; background: rgba(255,255,255,.68); border: 1px solid var(--line); }
+.guest-guide-content h3 { margin: 0 0 12px; font-family: Georgia, serif; font-size: 23px; font-weight: 400; }
+.guest-guide-content p { margin: 8px 0 0; color: #43535a; font-size: 15px; line-height: 1.7; }
+.guest-guide-content ul { margin: 12px 0 0; padding-left: 21px; color: #43535a; line-height: 1.7; }
+.guest-guide-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: guest-step; }
+.guest-guide-steps li { position: relative; padding: 15px 16px 15px 54px; background: #f4efe6; border-left: 3px solid var(--gold); counter-increment: guest-step; }
+.guest-guide-steps li::before { content: counter(guest-step); position: absolute; left: 16px; top: 14px; display: grid; width: 24px; height: 24px; place-items: center; color: var(--white); background: var(--red); border-radius: 50%; font-size: 12px; font-weight: 800; }
+.guest-guide-steps strong, .guest-guide-steps span { display: block; }
+.guest-guide-steps span { margin-top: 5px; color: #43535a; font-size: 14px; line-height: 1.65; }
+.guest-guide-highlight { color: var(--white); background: var(--ink) !important; border-color: var(--ink) !important; }
+.guest-guide-highlight h3 { color: #edc15e; }
+.guest-guide-highlight p { color: rgba(255,255,255,.82); }
+.guest-guide-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.guest-guide-link { display: block; width: 100%; padding: 0; color: inherit; text-decoration: none; background: transparent; border: 0; cursor: pointer; }
+.guest-guide-links figure { height: 100%; margin: 0; padding: 16px; text-align: center; background: var(--white); border: 1px solid var(--line); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.guest-guide-link:hover figure, .guest-guide-link:focus-visible figure { transform: translateY(-4px); border-color: var(--blue); box-shadow: 0 12px 28px rgba(20,30,34,.14); }
+.guest-guide-link:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.guest-guide-links img { width: min(150px, 100%); aspect-ratio: 1; object-fit: contain; image-rendering: crisp-edges; }
+.guest-guide-links figcaption { margin-top: 10px; color: var(--ink); font-size: 13px; font-weight: 800; }
+.guest-guide-links figcaption span { color: var(--blue); }
+.role-guides-dialog { width: min(760px, calc(100vw - 32px)); padding: 0; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(10,28,35,.32); }
+.role-guides-dialog::backdrop, .role-pdf-dialog::backdrop { background: rgba(10,28,35,.74); backdrop-filter: blur(4px); }
+.role-guides-shell { padding-bottom: 18px; }
+.role-guides-heading, .role-pdf-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 24px 26px 18px; border-bottom: 1px solid var(--line); }
+.role-guides-heading .eyebrow, .role-pdf-heading .eyebrow { margin: 0 0 6px; color: var(--red); }
+.role-guides-heading h2, .role-pdf-heading h2 { margin: 0; font-family: Georgia, serif; font-size: 32px; font-weight: 400; }
+.role-guides-heading p:not(.eyebrow) { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+.role-guide-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 22px 26px 12px; }
+.role-guide-list button { position: relative; min-height: 118px; padding: 20px 20px 18px 66px; color: var(--white); text-align: left; background: var(--ink); border: 0; border-top: 4px solid var(--gold); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.role-guide-list button:hover, .role-guide-list button:focus-visible { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(20,30,34,.2); outline: 3px solid var(--gold); outline-offset: 2px; }
+.role-guide-list button span { position: absolute; top: 20px; left: 20px; color: #edc15e; font-family: Georgia, serif; font-size: 20px; }
+.role-guide-list button strong { display: block; font-family: Georgia, serif; font-size: 23px; font-weight: 500; }
+.role-guide-list button small { display: block; margin-top: 8px; color: rgba(255,255,255,.7); font-size: 12px; }
+.role-guides-dismiss { margin: 4px 26px 0; color: var(--muted); font-size: 12px; text-align: center; }
+.role-pdf-dialog { width: min(980px, calc(100vw - 20px)); height: min(94vh, 1040px); padding: 0; overflow: hidden; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(10,28,35,.36); }
+.role-pdf-shell { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+.role-pdf-heading { padding: 15px 20px 12px; background: #fbf8f2; }
+.role-pdf-heading h2 { font-size: 27px; }
+.role-pdf-dialog iframe { width: 100%; height: 100%; background: #e7e7e7; border: 0; }
+.guest-guide-contact { padding: 18px 20px; color: var(--red) !important; background: #fbecef; border-left: 4px solid var(--red); font-weight: 700; }
 .tooltip { position: fixed; z-index: 100; max-width: 330px; padding: 13px 15px; color: var(--white); background: rgba(12,22,27,.97); border: 1px solid rgba(255,255,255,.15); box-shadow: 0 14px 40px rgba(0,0,0,.25); pointer-events: none; opacity: 0; transform: translateY(6px); transition: opacity .12s, transform .12s; font-size: 11px; white-space: pre-line; }
 .tooltip.detail { width: min(430px, calc(100vw - 28px)); max-width: 430px; padding: 16px 18px; border-top: 3px solid var(--gold); font-size: 12px; line-height: 1.55; }
 .tooltip.visible { opacity: 1; transform: translateY(0); }
@@ -444,6 +503,10 @@ footer p { text-align: right; }
   .bar-row { grid-template-columns: 115px 1fr 25px; }
   .leaderboard-panel { min-width: 0; }
   .speech-timeline, .week-speeches { grid-template-columns: 1fr; }
+  .meeting-awards { grid-template-columns: 1fr; }
+  .meeting-award { min-height: 0; padding: 20px 18px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .meeting-award:last-child { border-bottom: 0; }
+  .meeting-award strong { margin-top: 10px; font-size: 23px; }
   .assignment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   .panel-title { gap: 12px; padding: 17px 16px; }
   .panel-title h3 { font-size: 18px; }
@@ -517,6 +580,24 @@ footer p { text-align: right; }
   .agenda-time { font-size: 14px; }
   .agenda-copy strong { font-size: 16px; }
   .agenda-copy small { font-size: 13px; }
+  .guest-guide-dialog { width: calc(100vw - 16px); max-height: 92vh; }
+  .guest-guide-shell { max-height: 92vh; }
+  .guest-guide-heading { padding: 20px 18px 16px; }
+  .guest-guide-heading h2 { font-size: 27px; }
+  .guest-guide-content { gap: 12px; padding: 14px; }
+  .guest-guide-content section { padding: 18px 16px; }
+  .guest-guide-content h3 { font-size: 20px; }
+  .guest-guide-links { grid-template-columns: 1fr; }
+  .guest-guide-links figure { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 14px; text-align: left; }
+  .guest-guide-links img { width: 112px; }
+  .guest-guide-links figcaption { margin-top: 0; font-size: 15px; }
+  .role-guides-dialog { width: calc(100vw - 16px); }
+  .role-guides-heading, .role-pdf-heading { padding: 18px 16px 14px; }
+  .role-guide-list { grid-template-columns: 1fr; gap: 9px; padding: 14px; }
+  .role-guide-list button { min-height: 94px; padding-top: 16px; padding-bottom: 15px; }
+  .role-guide-list button span { top: 17px; }
+  .role-guides-dismiss { margin: 2px 14px 0; }
+  .role-pdf-dialog { width: calc(100vw - 8px); height: 96vh; }
   .agenda-dialog-details { padding: 18px; }
   .agenda-dialog-owner { font-size: 14px; }
   .agenda-dialog-details .agenda-table th, .agenda-dialog-details .agenda-table td { overflow-wrap: anywhere; }

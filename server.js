@@ -17,6 +17,7 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
 };
 
 async function fetchCsv(query) {

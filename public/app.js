@@ -3,6 +3,12 @@ const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
 const THEME_EDIT_FIELDS = ["Theme", "Theme Question", "Word of the day", "Quote of the day"];
+const AWARD_EDIT_FIELDS = ["Best Speaker", "Best evaluator", "Best table topic speaker"];
+const AWARD_DISPLAY_LABELS = {
+  "Best Speaker": "Best Speaker",
+  "Best evaluator": "Best Evaluator",
+  "Best table topic speaker": "Best Table Topic Speaker",
+};
 const ROLE_EDIT_FIELDS = [
   "Chairperson", "Toastmaster", "General Evaluator", "Table Topic Master", "Timer",
   "Ah Counter", "Grammarian", "Word & Quote Master", "Quiz Master", "Table Topic Evaluator",
@@ -534,6 +540,15 @@ function showThemeDetails(label, value) {
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
+function showAwardDetails(label, value) {
+  configureDetailsEditor();
+  setText("agendaDialogEyebrow", "MEETING AWARD");
+  setText("agendaDialogTitle", AWARD_DISPLAY_LABELS[label] || label);
+  document.getElementById("agendaDialogDetails").innerHTML = `<div class="award-detail-row"><div class="award-detail-value ${value ? "" : "pending"}">${escapeHtml(value || "Not selected")}</div><span data-inline-edit-slot></span></div>`;
+  configureDetailsEditor("awards", label);
+  document.getElementById("agendaDetailsDialog").showModal();
+}
+
 let suppressLongPressClickUntil = 0;
 function addMobileLongPress(element, openEditor) {
   let timer = null;
@@ -646,9 +661,10 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   state.editSection = section;
   state.editMeeting = meeting;
   state.editOriginSpeechItem = originItem;
-  const titles = { theme: "Meeting theme", roles: "Role assignments", speeches: "Prepared speeches" };
+  const titles = { theme: "Meeting theme", roles: "Role assignments", speeches: "Prepared speeches", awards: "Meeting awards" };
   setText("meetingEditEyebrow", `${formatMeetingDate(meeting.date)} MEETING · ${meeting.meetingNo || ""}`);
-  setText("meetingEditTitle", `Edit ${field || (speechSlot ? `Speaker ${speechSlot} speech` : titles[section])}`);
+  const displayField = section === "awards" && field ? (AWARD_DISPLAY_LABELS[field] || field) : field;
+  setText("meetingEditTitle", `Edit ${displayField || (speechSlot ? `Speaker ${speechSlot} speech` : titles[section])}`);
   let content = "";
   if (section === "theme") {
     const fields = field && THEME_EDIT_FIELDS.includes(field) ? [field] : THEME_EDIT_FIELDS;
@@ -656,6 +672,10 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   }
   if (section === "roles") {
     const fields = field && ROLE_EDIT_FIELDS.includes(field) ? [field] : ROLE_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "awards") {
+    const fields = field && AWARD_EDIT_FIELDS.includes(field) ? [field] : AWARD_EDIT_FIELDS;
     content = fields.map(label => editFieldHtml(meeting, label)).join("");
   }
   if (section === "speeches") {
@@ -1022,6 +1042,7 @@ function renderThisWeek(model) {
     document.getElementById("weekAssignments").innerHTML = `<div class="empty-state">No role assignments are available.</div>`;
     document.getElementById("agendaTimeline").innerHTML = `<div class="empty-state">No agenda is available.</div>`;
     document.getElementById("weekSpeeches").innerHTML = `<div class="empty-state">No prepared speeches are available.</div>`;
+    document.getElementById("meetingAwards").innerHTML = `<div class="empty-state">No meeting awards are available.</div>`;
     return;
   }
   setText("meetingTitle", `${formatMeetingDate(meeting.date)} Meeting`);
@@ -1096,6 +1117,22 @@ function renderThisWeek(model) {
         openDetails();
       }
     });
+  });
+
+  const awards = AWARD_EDIT_FIELDS.map(label => {
+    const winner = normalizeName(model.rowsByLabel.get(label)?.row[meeting.col]);
+    return { label, displayLabel: AWARD_DISPLAY_LABELS[label] || label, winner, pending: !winner };
+  });
+  const awardsContainer = document.getElementById("meetingAwards");
+  awardsContainer.innerHTML = awards.map((award, index) => `
+    <button type="button" class="meeting-award ${award.pending ? "pending" : ""}" data-award-index="${index}" aria-haspopup="dialog">
+      <span>${escapeHtml(award.displayLabel)}</span>
+      <strong>${escapeHtml(award.winner || "Not selected")}</strong>
+    </button>`).join("");
+  awardsContainer.querySelectorAll("[data-award-index]").forEach(button => {
+    const award = awards[Number(button.dataset.awardIndex)];
+    button.addEventListener("click", () => showAwardDetails(award.label, award.winner));
+    addMobileLongPress(button, () => openMeetingEditor("awards", award.label));
   });
 }
 
@@ -1192,6 +1229,44 @@ async function loadDashboard(force = false) {
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
+
+const guestGuideDialog = document.getElementById("guestGuideDialog");
+document.getElementById("guestGuideButton").addEventListener("click", event => {
+  event.preventDefault();
+  if (!guestGuideDialog.open) guestGuideDialog.showModal();
+});
+document.getElementById("closeGuestGuideDialog").addEventListener("click", () => guestGuideDialog.close());
+guestGuideDialog.addEventListener("click", event => {
+  if (event.target === guestGuideDialog) guestGuideDialog.close();
+});
+
+const roleGuidesDialog = document.getElementById("roleGuidesDialog");
+const rolePdfDialog = document.getElementById("rolePdfDialog");
+const rolePdfFrame = document.getElementById("rolePdfFrame");
+document.getElementById("roleGuidesButton").addEventListener("click", () => {
+  if (!roleGuidesDialog.open) roleGuidesDialog.showModal();
+});
+document.getElementById("closeRoleGuidesDialog").addEventListener("click", () => roleGuidesDialog.close());
+roleGuidesDialog.addEventListener("click", event => {
+  if (event.target === roleGuidesDialog) roleGuidesDialog.close();
+});
+document.querySelectorAll("[data-role-guide]").forEach(button => {
+  button.addEventListener("click", () => {
+    setText("rolePdfTitle", button.dataset.roleTitle);
+    rolePdfFrame.src = button.dataset.roleGuide;
+    roleGuidesDialog.close();
+    rolePdfDialog.showModal();
+  });
+});
+function closeRolePdf() {
+  rolePdfDialog.close();
+  rolePdfFrame.removeAttribute("src");
+}
+document.getElementById("closeRolePdfDialog").addEventListener("click", closeRolePdf);
+rolePdfDialog.addEventListener("click", event => {
+  if (event.target === rolePdfDialog) closeRolePdf();
+});
+rolePdfDialog.addEventListener("close", () => rolePdfFrame.removeAttribute("src"));
 
 let sharedDraftPollBusy = false;
 async function pollSharedDrafts() {

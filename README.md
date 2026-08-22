@@ -2,6 +2,8 @@
 
 Google Sheet의 `26_Roles`와 `26_Agenda` 탭을 읽어 역할 수행, 스피치 이력, 이번 주 아젠다를 보여주는 웹 대시보드입니다.
 
+처음부터 같은 프로그램을 만드는 전체 과정은 [YTTM_BUILD_GUIDE_KO.md](YTTM_BUILD_GUIDE_KO.md)를 참고하세요.
+
 ## 실행
 
 Node.js 18 이상이 설치된 환경에서 다음 명령을 실행합니다.
