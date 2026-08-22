@@ -609,7 +609,7 @@ footer p { text-align: right; }
   .role-pdf-heading .eyebrow { display: none; }
   .role-pdf-heading h2 { font-size: 21px; }
   .role-pdf-actions { gap: 7px; }
-  .role-pdf-actions a { padding: 8px 9px; font-size: 10px; }
+  .role-pdf-actions a { display: none; }
   .role-pdf-pages { padding: 8px; }
   .role-pdf-pages figure { margin-bottom: 8px; }
   .agenda-dialog-details { padding: 18px; }
