@@ -1244,6 +1244,7 @@ const roleGuidesDialog = document.getElementById("roleGuidesDialog");
 const rolePdfDialog = document.getElementById("rolePdfDialog");
 const rolePdfPages = document.getElementById("rolePdfPages");
 const rolePdfOriginalLink = document.getElementById("rolePdfOriginalLink");
+const rolePdfZoomButton = document.getElementById("rolePdfZoomButton");
 document.getElementById("roleGuidesButton").addEventListener("click", () => {
   if (!roleGuidesDialog.open) roleGuidesDialog.showModal();
 });
@@ -1269,14 +1270,26 @@ document.querySelectorAll("[data-role-guide]").forEach(button => {
 });
 function closeRolePdf() {
   rolePdfDialog.close();
+  rolePdfPages.classList.remove("is-zoomed");
+  rolePdfZoomButton.textContent = "확대";
+  rolePdfZoomButton.setAttribute("aria-pressed", "false");
   rolePdfPages.replaceChildren();
   rolePdfOriginalLink.removeAttribute("href");
 }
 document.getElementById("closeRolePdfDialog").addEventListener("click", closeRolePdf);
+rolePdfZoomButton.addEventListener("click", () => {
+  const zoomed = rolePdfPages.classList.toggle("is-zoomed");
+  rolePdfZoomButton.textContent = zoomed ? "축소" : "확대";
+  rolePdfZoomButton.setAttribute("aria-pressed", String(zoomed));
+  if (!zoomed) rolePdfPages.scrollLeft = 0;
+});
 rolePdfDialog.addEventListener("click", event => {
   if (event.target === rolePdfDialog) closeRolePdf();
 });
 rolePdfDialog.addEventListener("close", () => {
+  rolePdfPages.classList.remove("is-zoomed");
+  rolePdfZoomButton.textContent = "확대";
+  rolePdfZoomButton.setAttribute("aria-pressed", "false");
   rolePdfPages.replaceChildren();
   rolePdfOriginalLink.removeAttribute("href");
 });
