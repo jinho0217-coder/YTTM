@@ -191,6 +191,7 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .meeting-readiness.ready { --readiness-color: #2f815c; }
 .meeting-readiness.almost-ready { --readiness-color: #c27c19; }
 .meeting-readiness.needs-attention { --readiness-color: var(--red-bright); }
+.meeting-readiness.no-meeting { --readiness-color: var(--muted); }
 .readiness-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .readiness-heading span { color: var(--readiness-color); font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .readiness-heading strong { font-family: Georgia, serif; font-size: 24px; }

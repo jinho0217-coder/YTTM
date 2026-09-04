@@ -1,5 +1,6 @@
 const SPREADSHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const ROLES_SHEET = "26_Roles";
+const AGENDA_SHEET = "26_Agenda";
 const TIME_ZONE = "Asia/Seoul";
 const DRAFTS_PROPERTY = "YTTM_SHARED_DRAFTS";
 const AUDIT_PROPERTY = "YTTM_CHANGE_AUDIT";
@@ -33,6 +34,32 @@ function webResponse(payload, callback) {
     return ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return jsonResponse(payload);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function sheetCsv(sheet) {
+  return sheet.getDataRange().getDisplayValues()
+    .map(row => row.map(csvCell).join(","))
+    .join("\r\n");
+}
+
+function readSheetPayload() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const roles = spreadsheet.getSheetByName(ROLES_SHEET);
+  const agenda = spreadsheet.getSheetByName(AGENDA_SHEET);
+  if (!roles) throw new Error(`${ROLES_SHEET} was not found.`);
+  if (!agenda) throw new Error(`${AGENDA_SHEET} was not found.`);
+  return {
+    ok: true,
+    rolesCsv: sheetCsv(roles),
+    agendaCsv: sheetCsv(agenda),
+    fetchedAt: new Date().toISOString(),
+    source: `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?gid=${roles.getSheetId()}`,
+  };
 }
 
 function operationResponse(request, payload) {
@@ -178,6 +205,13 @@ function requirePin(pin) {
 function doGet(event) {
   const action = String(event?.parameter?.action || "getDrafts");
   const callback = String(event?.parameter?.callback || "");
+  if (action === "getSheets") {
+    try {
+      return webResponse(readSheetPayload(), callback);
+    } catch (error) {
+      return webResponse({ ok: false, error: error.message || String(error) }, callback);
+    }
+  }
   if (action === "status") {
     const requestId = String(event?.parameter?.requestId || "");
     const raw = /^[A-Za-z0-9_-]{8,80}$/.test(requestId) ? CacheService.getScriptCache().get(`YTTM_OPERATION_${requestId}`) : "";

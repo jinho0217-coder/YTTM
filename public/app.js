@@ -115,6 +115,17 @@ function captureSheetBaseValues(rolesRows) {
 }
 
 async function fetchPublicSheets() {
+  if (WRITE_ENDPOINT) {
+    try {
+      const livePayload = await jsonpRequest("getSheets");
+      if (livePayload?.ok && typeof livePayload.rolesCsv === "string" && typeof livePayload.agendaCsv === "string") {
+        return livePayload;
+      }
+      if (livePayload?.error) console.warn("Live sheet endpoint returned an error.", livePayload.error);
+    } catch (error) {
+      console.warn("Live sheet endpoint unavailable; using the public read-only sheets endpoint.", error);
+    }
+  }
   const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`;
   const stamp = Date.now();
   const [rolesResponse, agendaResponse] = await Promise.all([
@@ -282,7 +293,9 @@ function buildModel(rolesRows, agendaRows) {
   const upcomingMeetings = columns.filter(c => c.date >= meetingReferenceDate && !c.noMeeting);
   const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
   const followingMeeting = upcomingMeetings[1] || null;
-  const regularMeetings = columns.filter(c => !c.noMeeting);
+  // Keep no-meeting dates in the navigation so their date, number, and special
+  // event can still be shown. Completed/history aggregates continue to exclude them.
+  const regularMeetings = columns;
   const comingMeetingIndex = Math.max(0, regularMeetings.findIndex(c => c.col === comingMeeting?.col));
   const assignments = [];
   const speeches = [];
@@ -603,7 +616,7 @@ function activeMeeting() {
 }
 
 function canEditActiveMeeting() {
-  return Boolean(activeMeeting()) && (state.meetingOffset === 0 || state.meetingOffset === 1);
+  return Boolean(activeMeeting()) && !activeMeeting().noMeeting && (state.meetingOffset === 0 || state.meetingOffset === 1);
 }
 
 function editableValue(meeting, label) {
@@ -1070,7 +1083,7 @@ function renderThisWeek(model) {
   const meeting = activeMeeting();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
     button.disabled = !canEditActiveMeeting();
-    button.title = state.meetingOffset < 0 ? "Past meetings are read-only." : state.meetingOffset > 1 ? "Only Coming Up and Next Meeting can be edited." : "";
+    button.title = meeting?.noMeeting ? "No meeting is scheduled for this date." : state.meetingOffset < 0 ? "Past meetings are read-only." : state.meetingOffset > 1 ? "Only Coming Up and Next Meeting can be edited." : "";
   });
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
@@ -1094,11 +1107,34 @@ function renderThisWeek(model) {
     return;
   }
   setText("meetingTitle", `${formatMeetingDate(meeting.date)} Meeting`);
-  renderMeetingReadiness(model, meeting);
   setText("meetingNumber", meeting.meetingNo || "—");
   const special = document.getElementById("specialEvent");
   special.textContent = meeting.special ? `Special event · ${meeting.special}` : "";
   special.classList.toggle("hidden", !meeting.special);
+
+  if (meeting.noMeeting) {
+    const readiness = document.getElementById("meetingReadiness");
+    readiness.className = "meeting-readiness no-meeting";
+    readiness.setAttribute("aria-disabled", "true");
+    readiness.tabIndex = -1;
+    setText("readinessStatus", "No meeting");
+    setText("readinessScore", "—");
+    const missingElement = document.getElementById("readinessMissing");
+    missingElement.textContent = "No meeting is scheduled for this date.";
+    missingElement.removeAttribute("title");
+    document.getElementById("missingDialogSummary").textContent = "No meeting is scheduled for this date.";
+    document.getElementById("missingDialogList").innerHTML = "";
+    document.querySelector(".readiness-track").setAttribute("aria-valuenow", "0");
+    document.getElementById("readinessBar").style.width = "0%";
+    document.getElementById("meetingContext").innerHTML = `<div class="empty-state">No meeting details are available.</div>`;
+    document.getElementById("weekAssignments").innerHTML = `<div class="empty-state">No role assignments are available.</div>`;
+    document.getElementById("agendaTimeline").innerHTML = `<div class="empty-state">No agenda is available.</div>`;
+    document.getElementById("weekSpeeches").innerHTML = `<div class="empty-state">No prepared speeches are available.</div>`;
+    document.getElementById("meetingAwards").innerHTML = `<div class="empty-state">No meeting awards are available.</div>`;
+    return;
+  }
+
+  renderMeetingReadiness(model, meeting);
 
   const contextFields = [
     ["Theme", clean(model.rowsByLabel.get("Theme")?.row[meeting.col])],
