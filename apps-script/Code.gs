@@ -103,7 +103,8 @@ function sheetContext() {
     const chair = String(values[(rowByLabel.get("Chairperson") || 0) - 1]?.[column - 1] || "");
     columns.push({ date, column, noMeeting: /no meeting/i.test(`${special} ${chair}`) });
   }
-  const previousMeeting = columns.filter(item => item.date < referenceDate && !item.noMeeting).at(-1) || null;
+  const previousCandidates = columns.filter(item => item.date < referenceDate && !item.noMeeting);
+  const previousMeeting = previousCandidates[previousCandidates.length - 1] || null;
   const allowedMeetings = columns.filter(item => item.date >= referenceDate || item.column === previousMeeting?.column).map(({ date, column }) => ({ date, column }));
   return { sheet, rowByLabel, allowedMeetings };
 }
