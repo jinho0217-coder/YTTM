@@ -1081,13 +1081,9 @@ function renderHistory(model) {
 
 function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "") {
   const search = clean(query);
-  const summary = document.getElementById("memberSearchSummary");
   const container = document.getElementById("memberSearchResults");
-  const clearButton = document.getElementById("clearMemberSearch");
-  if (clearButton) clearButton.disabled = !search;
   if (!search) {
-    summary.textContent = "이름이나 Role을 검색해 보세요.";
-    container.innerHTML = `<div class="search-empty">예: <strong>Max</strong>, <strong>Timer</strong>, <strong>General Evaluator</strong></div>`;
+    container.innerHTML = "";
     return;
   }
   const needle = search.toLocaleLowerCase("ko-KR");
@@ -1095,7 +1091,6 @@ function renderMemberSearch(model, query = document.getElementById("memberSearch
   const grouped = new Map();
   matches.forEach(item => grouped.set(item.member, [...(grouped.get(item.member) || []), item]));
   const results = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], "en"));
-  summary.textContent = results.length ? `${results.length}명 · ${matches.length}건의 검색 결과` : "검색 결과가 없습니다.";
   container.innerHTML = results.length ? results.map(([member, items]) => {
     const recent = [...items].sort((a, b) => b.date - a.date).slice(0, 6);
     const roles = [...new Set(items.map(item => item.role))].join(" · ");
@@ -1355,7 +1350,6 @@ async function loadDashboard(force = false) {
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
 document.getElementById("memberSearchInput").addEventListener("input", event => { if (state.model) renderMemberSearch(state.model, event.target.value); });
-document.getElementById("clearMemberSearch").addEventListener("click", () => { const input = document.getElementById("memberSearchInput"); input.value = ""; input.focus(); if (state.model) renderMemberSearch(state.model, ""); });
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
 
 const guestGuideDialog = document.getElementById("guestGuideDialog");

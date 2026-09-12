@@ -48,23 +48,6 @@
 
         <div id="statusBanner" class="status-banner" role="status">Loading the latest data from Google Sheets.</div>
 
-        <section class="search-section" id="memberSearch" aria-labelledby="memberSearchTitle">
-          <div class="section-heading search-heading">
-            <div>
-              <p class="eyebrow">FIND A MEMBER OR ROLE</p>
-              <h2 id="memberSearchTitle">Search the role directory</h2>
-              <p>이름이나 Role을 입력하면 해당 담당자와 최근 회의 내역을 보여줍니다.</p>
-            </div>
-            <div class="search-box">
-              <label class="sr-only" for="memberSearchInput">Search by member name or role</label>
-              <input id="memberSearchInput" type="search" placeholder="예: Max, Timer" autocomplete="off" spellcheck="false" />
-              <button id="clearMemberSearch" type="button" aria-label="Clear member or role search">Clear</button>
-            </div>
-          </div>
-          <p id="memberSearchSummary" class="search-summary" role="status">이름이나 Role을 검색해 보세요.</p>
-          <div id="memberSearchResults" class="search-results" aria-live="polite"></div>
-        </section>
-
         <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
           <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
           <article class="metric-card accent-gold"><span>ROLE ASSIGNMENTS</span><strong id="roleCount">—</strong><small>현재까지 수행한 역할</small></article>
@@ -119,7 +102,13 @@
                 <h2 id="meetingTitle">Loading meeting date</h2>
                 <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
               </div>
-              <button type="button" class="special-event-tab meeting-special-event-action" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
+              <div class="meeting-action-row">
+                <button type="button" class="special-event-tab meeting-special-event-action" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
+                <div class="search-box meeting-search-box">
+                  <label class="sr-only" for="memberSearchInput">Search by member name or role</label>
+                  <input id="memberSearchInput" type="search" placeholder="이름 / Role 검색" autocomplete="off" spellcheck="false" />
+                </div>
+              </div>
             </div>
             <div id="meetingReadiness" class="meeting-readiness needs-attention" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open meeting readiness details">
               <div class="readiness-heading"><span id="readinessStatus">Checking readiness</span><strong id="readinessScore">0% (0/23)</strong></div>
@@ -127,6 +116,7 @@
               <p id="readinessMissing" class="readiness-missing">Checking required fields.</p>
             </div>
           </div>
+          <div id="memberSearchResults" class="search-results meeting-search-results" aria-live="polite"></div>
           <div id="specialEvent" class="special-event hidden"></div>
           <article class="panel meeting-context-panel">
             <div class="panel-title"><h3>Meeting theme</h3><span>Click an item for details</span></div>
