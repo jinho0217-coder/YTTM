@@ -1102,6 +1102,25 @@ function renderHistory(model) {
 
 let searchGroupStore = new Map();
 
+function searchSourceType(item) {
+  if (item.kind === "role") return "ROLE";
+  if (item.kind === "speech") {
+    return ({
+      "Speech presenter": "SPEECH PRESENTER",
+      Project: "PROJECT",
+      "Speech title": "SPEECH TITLE",
+      "Speech time": "SPEECH TIME",
+      Evaluator: "EVALUATOR",
+    })[item.label] || "SPEECH";
+  }
+  return ({
+    Theme: "THEME",
+    "Theme Question": "THEME QUESTION",
+    "Word of the day": "WORD OF THE DAY",
+    "Quote of the day": "QUOTE OF THE DAY",
+  })[item.label] || "MEETING";
+}
+
 function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "") {
   const search = clean(query);
   const container = document.getElementById("memberSearchResults");
@@ -1118,10 +1137,10 @@ function renderMemberSearch(model, query = document.getElementById("memberSearch
   searchGroupStore = new Map(results.map(([groupKey, items], index) => [String(index), { title: items[0].groupLabel || groupKey, items }]));
   container.innerHTML = results.length ? results.map(([groupKey, items], index) => {
     const recent = [...items].sort((a, b) => b.date - a.date).slice(0, 6);
-    const labels = [...new Set(items.map(item => item.kind === "role" ? item.role : item.label))].filter(Boolean).join(" · ");
     const title = items[0].groupLabel || groupKey;
-    const detail = item => item.kind === "role" ? `${item.role} · ${item.meetingNo || "Meeting"}` : `${item.label}: ${item.value}`;
-    return `<article class="search-result-card"><div class="search-result-heading"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(labels)}</span></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><span>${escapeHtml(detail(item))}</span></li>`).join("")}</ul>${items.length > recent.length ? `<button type="button" class="search-more-button" data-search-more="${index}">외 ${items.length - recent.length}건</button>` : ""}</article>`;
+    const titleType = items[0].kind === "meeting" ? "MEETING" : "NAME";
+    const detail = item => item.kind === "role" ? `${item.role} · ${item.meetingNo || "Meeting"}` : item.value;
+    return `<article class="search-result-card"><div class="search-result-heading"><div class="search-result-title"><span class="search-source-badge ${titleType === "NAME" ? "search-source-name" : ""}">${titleType}</span><strong>${escapeHtml(title)}</strong></div></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><div class="search-result-detail"><span class="search-source-badge">${escapeHtml(searchSourceType(item))}</span><span class="search-result-value">${escapeHtml(detail(item))}</span></div></li>`).join("")}</ul>${items.length > recent.length ? `<button type="button" class="search-more-button" data-search-more="${index}">외 ${items.length - recent.length}건</button>` : ""}</article>`;
   }).join("") : `<div class="search-empty">이름 또는 Role 철자를 확인해 주세요.</div>`;
 }
 
@@ -1131,7 +1150,7 @@ function openSearchResultsDialog(groupId) {
   setText("searchResultsTitle", group.title);
   const detail = item => item.kind === "role" ? item.member : item.value;
   const label = item => item.kind === "role" ? item.role : item.label;
-  document.getElementById("searchResultsDialogBody").innerHTML = [...group.items].sort((a, b) => b.date - a.date).map(item => `<article class="search-full-item"><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })} · ${escapeHtml(item.meetingNo || "Meeting")}</time><div><strong>${escapeHtml(label(item))}</strong><span>${escapeHtml(detail(item))}</span></div></article>`).join("");
+  document.getElementById("searchResultsDialogBody").innerHTML = [...group.items].sort((a, b) => b.date - a.date).map(item => `<article class="search-full-item"><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })} · ${escapeHtml(item.meetingNo || "Meeting")}</time><div><span class="search-source-badge">${escapeHtml(searchSourceType(item))}</span><strong>${escapeHtml(label(item))}</strong><span>${escapeHtml(detail(item))}</span></div></article>`).join("");
   document.getElementById("searchResultsDialog").showModal();
 }
 
