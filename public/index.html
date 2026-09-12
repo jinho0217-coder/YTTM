@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260904-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260912-1" />
   </head>
   <body>
     <div class="page-shell">
@@ -29,6 +29,7 @@
         <button type="button" role="tab" data-dashboard-tab="past" aria-selected="false">Past</button>
         <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up</button>
         <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next</button>
+        <button type="button" class="special-event-tab" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
         <button type="button" class="meeting-arrow" data-meeting-arrow="1" aria-label="Next meeting. Hold to go to the last meeting.">▶</button>
       </nav>
 
@@ -296,6 +297,6 @@
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20260904-1" defer></script>
+    <script src="./app.js?v=20260912-1" defer></script>
   </body>
 </html>

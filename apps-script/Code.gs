@@ -11,6 +11,7 @@ const MASTER_RESET_PIN = "1144";
 
 const EDITABLE_FIELDS = {
   theme: ["Theme", "Theme Question", "Word of the day", "Quote of the day"],
+  special: ["Special Event"],
   roles: [
     "Chairperson", "Toastmaster", "General Evaluator", "Table Topic Master", "Timer",
     "Ah Counter", "Grammarian", "Word & Quote Master", "Quiz Master", "Table Topic Evaluator",
@@ -99,12 +100,9 @@ function sheetContext() {
   for (let column = 2; column <= values[0].length; column += 1) {
     const date = normalizedDate(values[0][column - 1]);
     if (!date || date < meetingReferenceDate()) continue;
-    const special = specialRow ? String(values[specialRow - 1][column - 1] || "") : "";
-    const chair = chairRow ? String(values[chairRow - 1][column - 1] || "") : "";
-    if (/no meeting/i.test(`${special} ${chair}`)) continue;
     upcoming.push({ date, column });
   }
-  return { sheet, rowByLabel, allowedMeetings: upcoming.slice(0, 2) };
+  return { sheet, rowByLabel, allowedMeetings: upcoming };
 }
 
 function emptyDrafts() {
@@ -168,7 +166,7 @@ function validatedUpdates(section, updates) {
 
 function requireAllowedMeeting(context, meetingDate) {
   const target = context.allowedMeetings.find(meeting => meeting.date === String(meetingDate || ""));
-  if (!target) throw new Error("Only Coming Up and Next Meeting can be edited.");
+  if (!target) throw new Error("Only future meetings can be edited.");
   return target;
 }
 

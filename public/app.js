@@ -3,6 +3,7 @@ const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
 const THEME_EDIT_FIELDS = ["Theme", "Theme Question", "Word of the day", "Quote of the day"];
+const SPECIAL_EDIT_FIELDS = ["Special Event"];
 const AWARD_EDIT_FIELDS = ["Best Speaker", "Best evaluator", "Best table topic speaker"];
 const AWARD_DISPLAY_LABELS = {
   "Best Speaker": "Best Speaker",
@@ -616,7 +617,8 @@ function activeMeeting() {
 }
 
 function canEditActiveMeeting() {
-  return Boolean(activeMeeting()) && !activeMeeting().noMeeting && (state.meetingOffset === 0 || state.meetingOffset === 1);
+  const meeting = activeMeeting();
+  return Boolean(meeting) && meeting.date >= meetingReferenceDateKst();
 }
 
 function editableValue(meeting, label) {
@@ -678,13 +680,17 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   state.editSection = section;
   state.editMeeting = meeting;
   state.editOriginSpeechItem = originItem;
-  const titles = { theme: "Meeting theme", roles: "Role assignments", speeches: "Prepared speeches", awards: "Meeting awards" };
+  const titles = { theme: "Meeting theme", special: "Special Event", roles: "Role assignments", speeches: "Prepared speeches", awards: "Meeting awards" };
   setText("meetingEditEyebrow", `${formatMeetingDate(meeting.date)} MEETING · ${meeting.meetingNo || ""}`);
   const displayField = section === "awards" && field ? (AWARD_DISPLAY_LABELS[field] || field) : field;
   setText("meetingEditTitle", `Edit ${displayField || (speechSlot ? `Speaker ${speechSlot} speech` : titles[section])}`);
   let content = "";
   if (section === "theme") {
     const fields = field && THEME_EDIT_FIELDS.includes(field) ? [field] : THEME_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "special") {
+    const fields = field && SPECIAL_EDIT_FIELDS.includes(field) ? [field] : SPECIAL_EDIT_FIELDS;
     content = fields.map(label => editFieldHtml(meeting, label)).join("");
   }
   if (section === "roles") {
@@ -784,7 +790,7 @@ async function saveMeetingEditor(event) {
     }
     status.className = "meeting-edit-status error";
     status.textContent = /Unsupported edit section|Field is not allowed/i.test(error.message)
-      ? "Unable to save awards: the Google Apps Script deployment is outdated. Deploy the latest apps-script/Code.gs as a new web app version, then try again."
+      ? "Unable to save: the Google Apps Script deployment is outdated. Deploy the latest apps-script/Code.gs as a new web app version, then try again."
       : `Unable to save: ${error.message}`;
   } finally {
     setMeetingSaveBusy(false);
@@ -1083,8 +1089,13 @@ function renderThisWeek(model) {
   const meeting = activeMeeting();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
     button.disabled = !canEditActiveMeeting();
-    button.title = meeting?.noMeeting ? "No meeting is scheduled for this date." : state.meetingOffset < 0 ? "Past meetings are read-only." : state.meetingOffset > 1 ? "Only Coming Up and Next Meeting can be edited." : "";
+    button.title = state.model && meeting && meeting.date < meetingReferenceDateKst() ? "Past meetings are read-only." : "";
   });
+  const specialTab = document.querySelector("[data-special-event-tab]");
+  if (specialTab) {
+    specialTab.disabled = !canEditActiveMeeting();
+    specialTab.title = specialTab.disabled ? "Past meetings are read-only." : "Edit Special Event for this future meeting.";
+  }
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
     setText("meetingTitle", "No Scheduled Meeting");
@@ -1510,6 +1521,9 @@ document.getElementById("agendaDialogEditButton").addEventListener("click", even
 });
 const meetingEditDialog = document.getElementById("meetingEditDialog");
 document.querySelectorAll("[data-edit-section]").forEach(button => button.addEventListener("click", () => openMeetingEditor(button.dataset.editSection)));
+document.querySelector("[data-special-event-tab]")?.addEventListener("click", () => {
+  if (canEditActiveMeeting()) openMeetingEditor("special");
+});
 function closeMeetingEditor() {
   clearInterval(meetingLockTimer);
   meetingLockTimer = null;
