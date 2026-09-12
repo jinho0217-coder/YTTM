@@ -299,12 +299,19 @@ function buildModel(rolesRows, agendaRows) {
   const regularMeetings = columns;
   const comingMeetingIndex = Math.max(0, regularMeetings.findIndex(c => c.col === comingMeeting?.col));
   const assignments = [];
+  const searchAssignments = [];
   const speeches = [];
 
   rolesRows.forEach(row => {
     const sourceLabel = clean(row[0]);
     if (!isRoleRow(sourceLabel)) return;
     const role = canonicalRole(sourceLabel);
+    columns.forEach(column => {
+      if (column.noMeeting) return;
+      const member = normalizeName(row[column.col]);
+      if (!member) return;
+      searchAssignments.push({ member, role, sourceLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
+    });
     completedColumns.forEach(column => {
       const member = normalizeName(row[column.col]);
       if (!member) return;
@@ -346,7 +353,7 @@ function buildModel(rolesRows, agendaRows) {
 
   return {
     today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, previousEditableMeeting, comingMeeting, followingMeeting,
-    assignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
+    assignments, searchAssignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
 
@@ -1072,6 +1079,30 @@ function renderHistory(model) {
   container.querySelectorAll(".activity-card").forEach((card, index) => addTooltip(card, `${items[index].member}\n${items[index].role}\n${formatDate(items[index].date)} · Meeting ${items[index].meetingNo}`));
 }
 
+function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "") {
+  const search = clean(query);
+  const summary = document.getElementById("memberSearchSummary");
+  const container = document.getElementById("memberSearchResults");
+  const clearButton = document.getElementById("clearMemberSearch");
+  if (clearButton) clearButton.disabled = !search;
+  if (!search) {
+    summary.textContent = "이름이나 Role을 검색해 보세요.";
+    container.innerHTML = `<div class="search-empty">예: <strong>Max</strong>, <strong>Timer</strong>, <strong>General Evaluator</strong></div>`;
+    return;
+  }
+  const needle = search.toLocaleLowerCase("ko-KR");
+  const matches = (model.searchAssignments || []).filter(item => [item.member, item.role, item.sourceLabel].some(value => clean(value).toLocaleLowerCase("ko-KR").includes(needle)));
+  const grouped = new Map();
+  matches.forEach(item => grouped.set(item.member, [...(grouped.get(item.member) || []), item]));
+  const results = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], "en"));
+  summary.textContent = results.length ? `${results.length}명 · ${matches.length}건의 검색 결과` : "검색 결과가 없습니다.";
+  container.innerHTML = results.length ? results.map(([member, items]) => {
+    const recent = [...items].sort((a, b) => b.date - a.date).slice(0, 6);
+    const roles = [...new Set(items.map(item => item.role))].join(" · ");
+    return `<article class="search-result-card"><div class="search-result-heading"><strong>${escapeHtml(member)}</strong><span>${escapeHtml(roles)}</span></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><span>${escapeHtml(item.role)} · ${escapeHtml(item.meetingNo || "Meeting")}</span></li>`).join("")}</ul>${items.length > recent.length ? `<small>외 ${items.length - recent.length}건</small>` : ""}</article>`;
+  }).join("") : `<div class="search-empty">이름 또는 Role 철자를 확인해 주세요.</div>`;
+}
+
 function renderSpeeches(model) {
   const ranking = [...model.members].filter(m => m.speeches.length).sort((a,b) => b.speeches.length - a.speeches.length || a.name.localeCompare(b.name));
   document.getElementById("speechRanking").innerHTML = ranking.slice(0, 12).map((member, index) => `<div class="speaker-rank" data-name="${escapeHtml(member.name)}"><span class="rank">${String(index + 1).padStart(2,"0")}</span><strong>${escapeHtml(member.name)}</strong><b>${member.speeches.length}</b></div>`).join("");
@@ -1269,7 +1300,7 @@ function render(model, meta) {
   setText("memberCount", model.members.length);
   document.getElementById("sheetLink").href = meta.source;
   setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · Google Sheets`);
-  renderFilters(model); renderRoles(model); renderSpeeches(model); renderThisWeek(model);
+  renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
 async function loadDashboard(force = false) {
@@ -1323,6 +1354,8 @@ async function loadDashboard(force = false) {
 
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
+document.getElementById("memberSearchInput").addEventListener("input", event => { if (state.model) renderMemberSearch(state.model, event.target.value); });
+document.getElementById("clearMemberSearch").addEventListener("click", () => { const input = document.getElementById("memberSearchInput"); input.value = ""; input.focus(); if (state.model) renderMemberSearch(state.model, ""); });
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
 
 const guestGuideDialog = document.getElementById("guestGuideDialog");

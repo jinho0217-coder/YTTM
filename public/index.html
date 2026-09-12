@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260912-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260912-3" />
   </head>
   <body>
     <div class="page-shell">
@@ -47,6 +47,23 @@
         </section>
 
         <div id="statusBanner" class="status-banner" role="status">Loading the latest data from Google Sheets.</div>
+
+        <section class="search-section" id="memberSearch" aria-labelledby="memberSearchTitle">
+          <div class="section-heading search-heading">
+            <div>
+              <p class="eyebrow">FIND A MEMBER OR ROLE</p>
+              <h2 id="memberSearchTitle">Search the role directory</h2>
+              <p>이름이나 Role을 입력하면 해당 담당자와 최근 회의 내역을 보여줍니다.</p>
+            </div>
+            <div class="search-box">
+              <label class="sr-only" for="memberSearchInput">Search by member name or role</label>
+              <input id="memberSearchInput" type="search" placeholder="예: Max, Timer" autocomplete="off" spellcheck="false" />
+              <button id="clearMemberSearch" type="button" aria-label="Clear member or role search">Clear</button>
+            </div>
+          </div>
+          <p id="memberSearchSummary" class="search-summary" role="status">이름이나 Role을 검색해 보세요.</p>
+          <div id="memberSearchResults" class="search-results" aria-live="polite"></div>
+        </section>
 
         <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
           <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
@@ -297,6 +314,6 @@
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20260912-3" defer></script>
+    <script src="./app.js?v=20260912-4" defer></script>
   </body>
 </html>
