@@ -1102,6 +1102,10 @@ function renderHistory(model) {
 
 let searchGroupStore = new Map();
 
+function isMobileSearchViewport() {
+  return window.matchMedia?.("(max-width: 620px)").matches ?? window.innerWidth <= 620;
+}
+
 function searchSourceType(item) {
   if (item.kind === "role") return "ROLE";
   if (item.kind === "speech") {
@@ -1121,7 +1125,7 @@ function searchSourceType(item) {
   })[item.label] || "MEETING";
 }
 
-function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "") {
+function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "", options = {}) {
   const search = clean(query);
   const container = document.getElementById("memberSearchResults");
   if (!search) {
@@ -1135,13 +1139,24 @@ function renderMemberSearch(model, query = document.getElementById("memberSearch
   matches.forEach(item => grouped.set(item.groupKey || `member:${item.member}`, [...(grouped.get(item.groupKey || `member:${item.member}`) || []), item]));
   const results = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], "en"));
   searchGroupStore = new Map(results.map(([groupKey, items], index) => [String(index), { title: items[0].groupLabel || groupKey, items }]));
-  container.innerHTML = results.length ? results.map(([groupKey, items], index) => {
-    const recent = [...items].sort((a, b) => b.date - a.date).slice(0, 6);
+  const showInDialog = Boolean(options.openDialog) && isMobileSearchViewport();
+  const resultLimit = showInDialog ? Number.POSITIVE_INFINITY : 6;
+  const resultMarkup = results.length ? results.map(([groupKey, items], index) => {
+    const recent = [...items].sort((a, b) => b.date - a.date).slice(0, resultLimit);
     const title = items[0].groupLabel || groupKey;
     const titleType = items[0].kind === "meeting" ? "MEETING" : "NAME";
     const detail = item => item.kind === "role" ? `${item.role} · ${item.meetingNo || "Meeting"}` : item.value;
     return `<article class="search-result-card"><div class="search-result-heading"><div class="search-result-title"><span class="search-source-badge ${titleType === "NAME" ? "search-source-name" : ""}">${titleType}</span><strong>${escapeHtml(title)}</strong></div></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><div class="search-result-detail"><span class="search-source-badge">${escapeHtml(searchSourceType(item))}</span><span class="search-result-value">${escapeHtml(detail(item))}</span></div></li>`).join("")}</ul>${items.length > recent.length ? `<button type="button" class="search-more-button" data-search-more="${index}">외 ${items.length - recent.length}건</button>` : ""}</article>`;
   }).join("") : `<div class="search-empty">이름 또는 Role 철자를 확인해 주세요.</div>`;
+  if (showInDialog) {
+    setText("searchResultsTitle", `Search results for “${search}”`);
+    document.getElementById("searchResultsDialogBody").innerHTML = resultMarkup;
+    container.innerHTML = "";
+    const dialog = document.getElementById("searchResultsDialog");
+    if (!dialog.open) dialog.showModal();
+  } else {
+    container.innerHTML = resultMarkup;
+  }
 }
 
 function openSearchResultsDialog(groupId) {
@@ -1405,7 +1420,20 @@ async function loadDashboard(force = false) {
 
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
-document.getElementById("memberSearchInput").addEventListener("input", event => { if (state.model) renderMemberSearch(state.model, event.target.value); });
+const memberSearchInput = document.getElementById("memberSearchInput");
+memberSearchInput.addEventListener("input", event => {
+  if (!state.model) return;
+  if (isMobileSearchViewport()) {
+    if (!clean(event.target.value) && document.getElementById("searchResultsDialog").open) document.getElementById("searchResultsDialog").close();
+    return;
+  }
+  renderMemberSearch(state.model, event.target.value);
+});
+memberSearchInput.addEventListener("keydown", event => {
+  if (event.key !== "Enter" || !state.model) return;
+  event.preventDefault();
+  renderMemberSearch(state.model, event.currentTarget.value, { openDialog: isMobileSearchViewport() });
+});
 document.getElementById("memberSearchResults").addEventListener("click", event => { const button = event.target.closest("[data-search-more]"); if (button) openSearchResultsDialog(button.dataset.searchMore); });
 document.getElementById("closeSearchResultsDialog").addEventListener("click", () => document.getElementById("searchResultsDialog").close());
 document.getElementById("searchResultsDialog").addEventListener("click", event => { if (event.target === event.currentTarget) event.currentTarget.close(); });

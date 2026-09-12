@@ -537,6 +537,7 @@ footer p { text-align: right; }
   .hero-meta { grid-template-columns: 1fr; }
   .meeting-action-row { align-items: stretch; }
   .meeting-search-box { width: min(220px, 100%); }
+  .meeting-search-results { display: none !important; }
   .search-results { grid-template-columns: 1fr; }
   .search-results-dialog-body { padding: 18px; }
   .search-full-item { grid-template-columns: 1fr; gap: 4px; }
