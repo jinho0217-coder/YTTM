@@ -310,12 +310,23 @@ function buildModel(rolesRows, agendaRows) {
       if (column.noMeeting) return;
       const member = normalizeName(row[column.col]);
       if (!member) return;
-      searchAssignments.push({ member, role, sourceLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
+      searchAssignments.push({ member, role, sourceLabel, label: role, value: member, kind: "role", groupKey: `member:${member}`, groupLabel: member, date: column.date, meetingNo: column.meetingNo, col: column.col });
     });
     completedColumns.forEach(column => {
       const member = normalizeName(row[column.col]);
       if (!member) return;
       assignments.push({ member, role, sourceLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
+    });
+  });
+
+  const contentSearchFields = [["Theme", "Theme"], ["Theme Question", "Theme Question"], ["Word of the day", "Word of the day"], ["Quote of the day", "Quote of the day"]];
+  columns.forEach(column => {
+    if (column.noMeeting) return;
+    const groupLabel = `${formatMeetingDate(column.date)} Meeting${column.meetingNo ? ` · ${column.meetingNo}` : ""}`;
+    contentSearchFields.forEach(([rowLabel, label]) => {
+      const value = clean(rowsByLabel.get(rowLabel)?.row[column.col]);
+      if (!value) return;
+      searchAssignments.push({ member: "", role: "", sourceLabel: label, label, value, kind: "meeting", groupKey: `meeting:${column.col}`, groupLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
     });
   });
 
@@ -325,6 +336,16 @@ function buildModel(rolesRows, agendaRows) {
     const titleRow = rowsByLabel.get(`Title ${number}`)?.row || [];
     const timeRow = rowsByLabel.get(`Time ${number}`)?.row || [];
     const evaluatorRow = rowsByLabel.get(`Evaluator ${number}`)?.row || [];
+    columns.forEach(column => {
+      if (column.noMeeting) return;
+      const speaker = normalizeName(speakerRow[column.col]);
+      const fields = [["Speech presenter", speaker], ["Project", clean(projectRow[column.col])], ["Speech title", clean(titleRow[column.col])], ["Speech time", clean(timeRow[column.col])], ["Evaluator", normalizeName(evaluatorRow[column.col])]];
+      const meetingLabel = `${formatMeetingDate(column.date)} Meeting${column.meetingNo ? ` · ${column.meetingNo}` : ""}`;
+      fields.forEach(([label, value]) => {
+        if (!value) return;
+        searchAssignments.push({ member: speaker, role: "", sourceLabel: label, label, value, kind: "speech", groupKey: speaker ? `member:${speaker}` : `meeting:${column.col}`, groupLabel: speaker || meetingLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
+      });
+    });
     completedColumns.forEach(column => {
       const speaker = normalizeName(speakerRow[column.col]);
       if (!speaker) return;
@@ -1079,23 +1100,39 @@ function renderHistory(model) {
   container.querySelectorAll(".activity-card").forEach((card, index) => addTooltip(card, `${items[index].member}\n${items[index].role}\n${formatDate(items[index].date)} · Meeting ${items[index].meetingNo}`));
 }
 
+let searchGroupStore = new Map();
+
 function renderMemberSearch(model, query = document.getElementById("memberSearchInput")?.value || "") {
   const search = clean(query);
   const container = document.getElementById("memberSearchResults");
   if (!search) {
+    searchGroupStore = new Map();
     container.innerHTML = "";
     return;
   }
   const needle = search.toLocaleLowerCase("ko-KR");
-  const matches = (model.searchAssignments || []).filter(item => [item.member, item.role, item.sourceLabel].some(value => clean(value).toLocaleLowerCase("ko-KR").includes(needle)));
+  const matches = (model.searchAssignments || []).filter(item => [item.member, item.role, item.sourceLabel, item.label, item.value].some(value => clean(value).toLocaleLowerCase("ko-KR").includes(needle)));
   const grouped = new Map();
-  matches.forEach(item => grouped.set(item.member, [...(grouped.get(item.member) || []), item]));
+  matches.forEach(item => grouped.set(item.groupKey || `member:${item.member}`, [...(grouped.get(item.groupKey || `member:${item.member}`) || []), item]));
   const results = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], "en"));
-  container.innerHTML = results.length ? results.map(([member, items]) => {
+  searchGroupStore = new Map(results.map(([groupKey, items], index) => [String(index), { title: items[0].groupLabel || groupKey, items }]));
+  container.innerHTML = results.length ? results.map(([groupKey, items], index) => {
     const recent = [...items].sort((a, b) => b.date - a.date).slice(0, 6);
-    const roles = [...new Set(items.map(item => item.role))].join(" · ");
-    return `<article class="search-result-card"><div class="search-result-heading"><strong>${escapeHtml(member)}</strong><span>${escapeHtml(roles)}</span></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><span>${escapeHtml(item.role)} · ${escapeHtml(item.meetingNo || "Meeting")}</span></li>`).join("")}</ul>${items.length > recent.length ? `<small>외 ${items.length - recent.length}건</small>` : ""}</article>`;
+    const labels = [...new Set(items.map(item => item.kind === "role" ? item.role : item.label))].filter(Boolean).join(" · ");
+    const title = items[0].groupLabel || groupKey;
+    const detail = item => item.kind === "role" ? `${item.role} · ${item.meetingNo || "Meeting"}` : `${item.label}: ${item.value}`;
+    return `<article class="search-result-card"><div class="search-result-heading"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(labels)}</span></div><ul>${recent.map(item => `<li><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })}</time><span>${escapeHtml(detail(item))}</span></li>`).join("")}</ul>${items.length > recent.length ? `<button type="button" class="search-more-button" data-search-more="${index}">외 ${items.length - recent.length}건</button>` : ""}</article>`;
   }).join("") : `<div class="search-empty">이름 또는 Role 철자를 확인해 주세요.</div>`;
+}
+
+function openSearchResultsDialog(groupId) {
+  const group = searchGroupStore.get(String(groupId));
+  if (!group) return;
+  setText("searchResultsTitle", group.title);
+  const detail = item => item.kind === "role" ? item.member : item.value;
+  const label = item => item.kind === "role" ? item.role : item.label;
+  document.getElementById("searchResultsDialogBody").innerHTML = [...group.items].sort((a, b) => b.date - a.date).map(item => `<article class="search-full-item"><time>${formatDate(item.date, { year: "numeric", month: "numeric", day: "numeric" })} · ${escapeHtml(item.meetingNo || "Meeting")}</time><div><strong>${escapeHtml(label(item))}</strong><span>${escapeHtml(detail(item))}</span></div></article>`).join("");
+  document.getElementById("searchResultsDialog").showModal();
 }
 
 function renderSpeeches(model) {
@@ -1350,6 +1387,9 @@ async function loadDashboard(force = false) {
 document.getElementById("memberFilter").addEventListener("change", event => { state.member = event.target.value; renderRoles(state.model); });
 document.getElementById("roleFilter").addEventListener("change", event => { state.role = event.target.value; renderRoles(state.model); });
 document.getElementById("memberSearchInput").addEventListener("input", event => { if (state.model) renderMemberSearch(state.model, event.target.value); });
+document.getElementById("memberSearchResults").addEventListener("click", event => { const button = event.target.closest("[data-search-more]"); if (button) openSearchResultsDialog(button.dataset.searchMore); });
+document.getElementById("closeSearchResultsDialog").addEventListener("click", () => document.getElementById("searchResultsDialog").close());
+document.getElementById("searchResultsDialog").addEventListener("click", event => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
 
 const guestGuideDialog = document.getElementById("guestGuideDialog");

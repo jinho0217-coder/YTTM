@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260912-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260912-6" />
   </head>
   <body>
     <div class="page-shell">
@@ -173,6 +173,13 @@
       <div id="agendaDialogDetails" class="agenda-dialog-details"></div>
       <div id="agendaDialogActions" class="agenda-dialog-actions hidden"><button type="button" id="agendaDialogEditButton" class="primary-button">Edit</button></div>
     </dialog>
+    <dialog id="searchResultsDialog" class="search-results-dialog" aria-labelledby="searchResultsTitle">
+      <div class="missing-dialog-heading">
+        <div><p>SEARCH RESULTS</p><h2 id="searchResultsTitle">All matching items</h2></div>
+        <button type="button" id="closeSearchResultsDialog" class="dialog-close" aria-label="Close search results">&times;</button>
+      </div>
+      <div id="searchResultsDialogBody" class="search-results-dialog-body"></div>
+    </dialog>
     <dialog id="meetingEditDialog" class="meeting-edit-dialog" aria-labelledby="meetingEditTitle">
       <form id="meetingEditForm" method="dialog">
         <div class="missing-dialog-heading">
@@ -305,6 +312,6 @@
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20260912-5" defer></script>
+    <script src="./app.js?v=20260912-6" defer></script>
   </body>
 </html>
