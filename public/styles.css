@@ -71,9 +71,11 @@ a { color: inherit; }
 .dashboard-tabs button[aria-selected="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
 .dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 18px; }
 .dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
-.dashboard-tabs .special-event-tab { color: var(--blue); border-color: rgba(30,114,133,.24); }
-.dashboard-tabs .special-event-tab:hover { color: var(--blue); background: rgba(30,114,133,.1); }
-.dashboard-tabs .special-event-tab:disabled { color: var(--muted); opacity: .45; cursor: not-allowed; }
+.special-event-tab { display: inline-flex; align-items: center; min-height: 36px; padding: 8px 14px; color: var(--blue); background: transparent; border: 1px solid rgba(30,114,133,.3); border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.special-event-tab:hover { color: var(--blue); background: rgba(30,114,133,.1); }
+.special-event-tab:focus-visible { outline: 3px solid rgba(30,114,133,.26); outline-offset: 3px; }
+.special-event-tab:disabled { color: var(--muted); opacity: .45; cursor: not-allowed; }
+.meeting-special-event-action { margin-top: 14px; }
 [data-tab-panel][hidden] { display: none !important; }
 .refresh-button { color: var(--white); background: transparent; border: 1px solid rgba(255,255,255,.32); padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: 12px; }
 .refresh-button:hover { background: rgba(255,255,255,.1); }

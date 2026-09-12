@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260912-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260912-2" />
   </head>
   <body>
     <div class="page-shell">
@@ -29,7 +29,6 @@
         <button type="button" role="tab" data-dashboard-tab="past" aria-selected="false">Past</button>
         <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up</button>
         <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next</button>
-        <button type="button" class="special-event-tab" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
         <button type="button" class="meeting-arrow" data-meeting-arrow="1" aria-label="Next meeting. Hold to go to the last meeting.">▶</button>
       </nav>
 
@@ -103,6 +102,7 @@
                 <h2 id="meetingTitle">Loading meeting date</h2>
                 <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
               </div>
+              <button type="button" class="special-event-tab meeting-special-event-action" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
             </div>
             <div id="meetingReadiness" class="meeting-readiness needs-attention" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open meeting readiness details">
               <div class="readiness-heading"><span id="readinessStatus">Checking readiness</span><strong id="readinessScore">0% (0/23)</strong></div>
