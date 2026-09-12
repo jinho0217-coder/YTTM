@@ -290,7 +290,7 @@ function buildModel(rolesRows, agendaRows) {
     return anchors.filter(label => clean(rowsByLabel.get(label)?.row[c.col])).length >= 3;
   });
   const completedSet = new Set(completedColumns.map(c => c.col));
-  const pastMeeting = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).at(-1) || null;
+  const previousEditableMeeting = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).at(-1) || null;
   const upcomingMeetings = columns.filter(c => c.date >= meetingReferenceDate && !c.noMeeting);
   const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
   const followingMeeting = upcomingMeetings[1] || null;
@@ -345,7 +345,7 @@ function buildModel(rolesRows, agendaRows) {
   });
 
   return {
-    today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, pastMeeting, comingMeeting, followingMeeting,
+    today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, previousEditableMeeting, comingMeeting, followingMeeting,
     assignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
@@ -618,7 +618,7 @@ function activeMeeting() {
 
 function canEditActiveMeeting() {
   const meeting = activeMeeting();
-  return Boolean(meeting) && meeting.date >= meetingReferenceDateKst();
+  return Boolean(meeting) && (meeting.date >= meetingReferenceDateKst() || meeting.col === state.model.previousEditableMeeting?.col);
 }
 
 function editableValue(meeting, label) {
@@ -1089,12 +1089,12 @@ function renderThisWeek(model) {
   const meeting = activeMeeting();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
     button.disabled = !canEditActiveMeeting();
-    button.title = state.model && meeting && meeting.date < meetingReferenceDateKst() ? "Past meetings are read-only." : "";
+    button.title = state.model && meeting && meeting.date < meetingReferenceDateKst() && !canEditActiveMeeting() ? "Only the immediately previous meeting can be edited." : "";
   });
   const specialTab = document.querySelector("[data-special-event-tab]");
   if (specialTab) {
     specialTab.disabled = !canEditActiveMeeting();
-    specialTab.title = specialTab.disabled ? "Past meetings are read-only." : "Edit Special Event for this future meeting.";
+    specialTab.title = specialTab.disabled ? "Only the immediately previous meeting and future meetings can be edited." : "Edit Special Event for this meeting.";
   }
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {

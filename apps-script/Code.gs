@@ -94,15 +94,18 @@ function sheetContext() {
   if (!values.length) throw new Error("26_Roles is empty.");
   const rowByLabel = new Map();
   values.forEach((row, index) => rowByLabel.set(String(row[0] || "").trim(), index + 1));
-  const specialRow = rowByLabel.get("Special Event");
-  const chairRow = rowByLabel.get("Chairperson");
-  const upcoming = [];
+  const referenceDate = meetingReferenceDate();
+  const columns = [];
   for (let column = 2; column <= values[0].length; column += 1) {
     const date = normalizedDate(values[0][column - 1]);
-    if (!date || date < meetingReferenceDate()) continue;
-    upcoming.push({ date, column });
+    if (!date) continue;
+    const special = String(values[(rowByLabel.get("Special Event") || 0) - 1]?.[column - 1] || "");
+    const chair = String(values[(rowByLabel.get("Chairperson") || 0) - 1]?.[column - 1] || "");
+    columns.push({ date, column, noMeeting: /no meeting/i.test(`${special} ${chair}`) });
   }
-  return { sheet, rowByLabel, allowedMeetings: upcoming };
+  const previousMeeting = columns.filter(item => item.date < referenceDate && !item.noMeeting).at(-1) || null;
+  const allowedMeetings = columns.filter(item => item.date >= referenceDate || item.column === previousMeeting?.column).map(({ date, column }) => ({ date, column }));
+  return { sheet, rowByLabel, allowedMeetings };
 }
 
 function emptyDrafts() {
@@ -166,7 +169,7 @@ function validatedUpdates(section, updates) {
 
 function requireAllowedMeeting(context, meetingDate) {
   const target = context.allowedMeetings.find(meeting => meeting.date === String(meetingDate || ""));
-  if (!target) throw new Error("Only future meetings can be edited.");
+  if (!target) throw new Error("Only the immediately previous meeting and future meetings can be edited.");
   return target;
 }
 
