@@ -387,8 +387,6 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .meeting-edit-field > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .meeting-edit-field input { width: 100%; min-width: 0; padding: 12px 13px; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-right: 0; font-size: 15px; }
 .meeting-edit-field input:focus { position: relative; outline: 2px solid var(--blue); outline-offset: -2px; }
-.meeting-edit-field.locked { padding: 12px; background: #fff4dd; border-left: 4px solid var(--gold); }
-.meeting-edit-field.locked input { color: #8a7c67; background: #eee9df; cursor: not-allowed; }
 .clear-field-button { padding: 0 13px; color: var(--muted); background: #eee9e0; border: 1px solid var(--line); font-size: 11px; font-weight: 800; cursor: pointer; }
 .clear-field-button:hover { color: var(--red); background: #fff0f1; }
 .speech-edit-group { display: grid; gap: 13px; margin: 0; padding: 18px; border: 1px solid var(--line); }
@@ -397,7 +395,6 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .meeting-edit-status.success { color: #14734f; }
 .meeting-edit-status.error { color: var(--red); font-weight: 700; }
 .meeting-edit-status.warning { color: #8a5a0a; font-weight: 800; }
-.meeting-edit-status.locked { color: #8a5a0a; font-weight: 800; }
 .meeting-save-progress { height: 4px; margin: -7px 26px 12px; overflow: hidden; background: #e8e1d7; border-radius: 999px; opacity: 0; transition: opacity .15s ease; }
 .meeting-save-progress span { display: block; width: 38%; height: 100%; background: linear-gradient(90deg, var(--red), var(--gold)); border-radius: inherit; transform: translateX(-120%); }
 .meeting-save-progress.active { opacity: 1; }

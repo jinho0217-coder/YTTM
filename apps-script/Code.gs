@@ -106,7 +106,7 @@ function sheetContext() {
   const previousCandidates = columns.filter(item => item.date < referenceDate && !item.noMeeting);
   const previousMeeting = previousCandidates[previousCandidates.length - 1] || null;
   const allowedMeetings = columns.filter(item => item.date >= referenceDate || item.column === previousMeeting?.column).map(({ date, column }) => ({ date, column }));
-  return { sheet, rowByLabel, allowedMeetings };
+  return { sheet, values, rowByLabel, allowedMeetings };
 }
 
 function emptyDrafts() {
@@ -119,7 +119,8 @@ function readDrafts() {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.meetings) return emptyDrafts();
-    parsed.locks = parsed.locks || {};
+    // Retire cooldowns saved by previous deployments.
+    parsed.locks = {};
     parsed.bases = parsed.bases || {};
     parsed.fieldVersions = parsed.fieldVersions || {};
     return parsed;
@@ -235,7 +236,6 @@ function doPost(event) {
       const target = requireAllowedMeeting(context, request.meetingDate);
       const updates = validatedUpdates(request.section, request.updates);
       const drafts = readDrafts();
-      const now = Date.now();
       const expectedVersions = request.fieldVersions && typeof request.fieldVersions === "object" ? request.fieldVersions : {};
       const draftConflicts = [];
       Object.keys(updates).forEach(label => {
@@ -255,31 +255,24 @@ function doPost(event) {
       Object.keys(updates).forEach(label => {
         const row = context.rowByLabel.get(label);
         if (!row) throw new Error(`Row was not found: ${label}`);
-        const sheetValue = String(context.sheet.getRange(row, target.column).getValue() ?? "").trim();
+        const sheetValue = String(context.values[row - 1][target.column - 1] ?? "").trim();
         sheetValues[label] = sheetValue;
         if (Object.prototype.hasOwnProperty.call(expectedValues, label) && String(expectedValues[label] ?? "").trim() !== sheetValue) {
           sheetConflicts.push(label);
         }
       });
       if (sheetConflicts.length) {
-        if (!drafts.locks[target.date]) drafts.locks[target.date] = {};
-        if (!drafts.locks[target.date][request.section]) drafts.locks[target.date][request.section] = {};
         sheetConflicts.forEach(label => {
-          drafts.locks[target.date][request.section][label] = now + 60000;
           if (drafts.meetings?.[target.date]?.[request.section]) delete drafts.meetings[target.date][request.section][label];
           if (drafts.bases?.[target.date]?.[request.section]) delete drafts.bases[target.date][request.section][label];
+          const key = fieldKey(target.date, request.section, label);
+          drafts.fieldVersions[key] = Number(drafts.fieldVersions[key] || 0) + 1;
         });
         if (drafts.meetings?.[target.date]?.[request.section] && !Object.keys(drafts.meetings[target.date][request.section]).length) delete drafts.meetings[target.date][request.section];
         if (drafts.meetings?.[target.date] && !Object.keys(drafts.meetings[target.date]).length) delete drafts.meetings[target.date];
         writeDrafts(drafts);
-        return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed first. The latest sheet data has been loaded. You can edit this item after 1 minute.", conflicts: sheetConflicts, sheetValues });
+        return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed first. Reload the latest sheet data, review it and edit again.", conflicts: sheetConflicts, sheetValues });
       }
-      const sectionLocks = drafts.locks?.[target.date]?.[request.section] || {};
-      Object.keys(updates).forEach(label => {
-        if (Number(sectionLocks[label] || 0) > now) {
-          throw new Error("Someone edited this item first. You can change it after 20 seconds.");
-        }
-      });
       if (!drafts.meetings[target.date]) drafts.meetings[target.date] = {};
       if (!drafts.bases[target.date]) drafts.bases[target.date] = {};
       if (!drafts.bases[target.date][request.section]) drafts.bases[target.date][request.section] = {};
@@ -287,7 +280,7 @@ function doPost(event) {
       Object.entries(updates).forEach(([label, value]) => {
         const row = context.rowByLabel.get(label);
         if (!row) throw new Error(`Row was not found: ${label}`);
-        const sheetValue = String(context.sheet.getRange(row, target.column).getValue() ?? "").trim();
+        const sheetValue = sheetValues[label];
         if (value === sheetValue) delete sectionDraft[label];
         else {
           sectionDraft[label] = value;
@@ -300,12 +293,9 @@ function doPost(event) {
       if (Object.keys(sectionDraft).length) drafts.meetings[target.date][request.section] = sectionDraft;
       else delete drafts.meetings[target.date][request.section];
       if (!Object.keys(drafts.meetings[target.date]).length) delete drafts.meetings[target.date];
-      if (!drafts.locks[target.date]) drafts.locks[target.date] = {};
-      if (!drafts.locks[target.date][request.section]) drafts.locks[target.date][request.section] = {};
-      Object.keys(updates).forEach(label => { drafts.locks[target.date][request.section][label] = now + 20000; });
       const saved = writeDrafts(drafts);
       appendAudit(Object.entries(updates).map(([label, value]) => ({ at: new Date().toISOString(), action: "draft", meetingDate: target.date, section: request.section, label, value, revision: saved.fieldVersions[fieldKey(target.date, request.section, label)] })));
-      return operationResponse(request, { ok: true, draft: true, revision: saved.revision, fieldVersions: saved.fieldVersions, updated: Object.keys(updates).length });
+      return operationResponse(request, { ok: true, draft: true, revision: saved.revision, fieldVersions: saved.fieldVersions, drafts: saved, updated: Object.keys(updates).length });
     }
 
     if (request.action === "applyDrafts") {
@@ -366,14 +356,7 @@ function doPost(event) {
       }
       drafts.meetings = {};
       drafts.bases = {};
-      const now = Date.now();
-      Object.keys(drafts.locks || {}).forEach(date => {
-        Object.keys(drafts.locks[date] || {}).forEach(section => {
-          Object.keys(drafts.locks[date][section] || {}).forEach(label => {
-            if (Number(drafts.locks[date][section][label] || 0) <= now) delete drafts.locks[date][section][label];
-          });
-        });
-      });
+      drafts.locks = {};
       const saved = writeDrafts(drafts);
       const appliedKeys = new Set(writes.map(item => fieldKey(item.meetingDate, item.section, item.label)));
       const discarded = allEntries.filter(item => !appliedKeys.has(fieldKey(item.meetingDate, item.section, item.label)));

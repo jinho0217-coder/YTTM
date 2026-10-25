@@ -25,7 +25,7 @@ async function apiRequest(payload) {
     body: JSON.stringify({ ...payload, requestId }),
   });
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500));
     const result = await jsonpRequest("status", { requestId });
     if (!result.pending) {
       if (!result.ok) {
@@ -659,47 +659,11 @@ function editFieldHtml(meeting, label) {
   return `<label class="meeting-edit-field" for="${id}"><span>${escapeHtml(label)}</span><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(value)}" maxlength="500" autocomplete="off"><button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></label>`;
 }
 
-let meetingLockTimer = null;
+let meetingSaveBusy = false;
+let dashboardLoadVersion = 0;
 
 function activeEditApiSection() {
   return state.editSection === "awards" ? "roles" : state.editSection;
-}
-
-function updateMeetingFieldLocks() {
-  clearInterval(meetingLockTimer);
-  const meeting = state.editMeeting;
-  if (!meeting) return;
-  const meetingDate = sheetDateValue(meeting.date);
-  const locks = state.sharedDrafts.locks?.[meetingDate]?.[activeEditApiSection()] || {};
-  const status = document.getElementById("meetingEditStatus");
-  const refreshLocks = () => {
-    const now = Date.now();
-    let longest = 0;
-    document.querySelectorAll("#meetingEditFields [data-edit-field]").forEach(input => {
-      const remaining = Math.max(0, Math.ceil((Number(locks[input.dataset.editField] || 0) - now) / 1000));
-      const field = input.closest(".meeting-edit-field");
-      const clearButton = field?.querySelector("[data-clear-field]");
-      input.disabled = remaining > 0;
-      if (clearButton) clearButton.disabled = remaining > 0;
-      field?.classList.toggle("locked", remaining > 0);
-      longest = Math.max(longest, remaining);
-    });
-    if (longest > 0) {
-      status.className = "meeting-edit-status locked";
-      status.textContent = `Someone edited this item first. You can change it after ${longest} second${longest === 1 ? "" : "s"}.`;
-      document.getElementById("saveMeetingEdit").disabled = true;
-    } else {
-      clearInterval(meetingLockTimer);
-      meetingLockTimer = null;
-      status.className = "meeting-edit-status";
-      status.textContent = "This will update the shared draft, not Google Sheets.";
-      updateMeetingEditorState();
-    }
-  };
-  refreshLocks();
-  if ([...document.querySelectorAll("#meetingEditFields [data-edit-field]")].some(input => input.disabled)) {
-    meetingLockTimer = setInterval(refreshLocks, 1000);
-  }
 }
 
 function openMeetingEditor(section, field = "", speechSlot = null, originItem = null) {
@@ -741,16 +705,17 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   setText("meetingEditStatus", WRITE_ENDPOINT ? "This will update the shared draft, not Google Sheets." : "Shared draft saving is not configured.");
   document.getElementById("saveMeetingEdit").disabled = true;
   document.getElementById("meetingEditDialog").showModal();
-  updateMeetingFieldLocks();
+  updateMeetingEditorState();
 }
 
 function updateMeetingEditorState() {
   const inputs = [...document.querySelectorAll("#meetingEditFields [data-edit-field]:not(:disabled)")];
   const changed = inputs.some(input => input.value.trim() !== input.dataset.initialValue);
-  document.getElementById("saveMeetingEdit").disabled = !changed;
+  document.getElementById("saveMeetingEdit").disabled = meetingSaveBusy || !WRITE_ENDPOINT || !changed;
 }
 
 function setMeetingSaveBusy(busy) {
+  meetingSaveBusy = busy;
   const dialog = document.getElementById("meetingEditDialog");
   const saveButton = document.getElementById("saveMeetingEdit");
   const progress = document.getElementById("meetingSaveProgress");
@@ -766,7 +731,7 @@ function setMeetingSaveBusy(busy) {
 
 async function saveMeetingEditor(event) {
   event.preventDefault();
-  if (!state.editMeeting || !canEditActiveMeeting()) return;
+  if (meetingSaveBusy || !state.editMeeting || !canEditActiveMeeting()) return;
   const saveButton = document.getElementById("saveMeetingEdit");
   const status = document.getElementById("meetingEditStatus");
   if (!WRITE_ENDPOINT) {
@@ -778,11 +743,14 @@ async function saveMeetingEditor(event) {
     .filter(input => input.value.trim() !== input.dataset.initialValue)
     .map(input => [input.dataset.editField, input.value.trim()]));
   const meetingDate = sheetDateValue(state.editMeeting.date);
+  if (!Object.keys(updates).length) return;
   const apiSection = activeEditApiSection();
   const baseValues = Object.fromEntries(Object.keys(updates).map(label => [label, state.sheetBaseValues[meetingDate]?.[label] || ""]));
   const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.sharedDrafts.fieldVersions?.[`${meetingDate}|${apiSection}|${label}`] || 0)]));
   saveButton.disabled = true;
   setMeetingSaveBusy(true);
+  // Ignore reads started before this save; they may contain an older draft.
+  dashboardLoadVersion += 1;
   status.className = "meeting-edit-status";
   status.textContent = "Saving to the shared draft… Please keep this window open.";
   try {
@@ -800,19 +768,20 @@ async function saveMeetingEditor(event) {
       state.editOriginSpeechItem.querySelector("strong").textContent = value;
       state.editOriginSpeechItem.classList.toggle("pending", value === "Pending");
     }
-    status.className = "meeting-edit-status success";
-    status.textContent = `Draft saved. Updating everyone’s view…`;
-    await loadDashboard(true);
-    status.textContent = `Saved ${result.updated} shared draft field${result.updated === 1 ? "" : "s"}.`;
+    applyConfirmedDraft(result, meetingDate, apiSection, updates);
     closeMeetingEditor();
+    const banner = document.getElementById("statusBanner");
+    banner.className = "status-banner ready";
+    banner.textContent = `Saved ${result.updated} shared draft field${result.updated === 1 ? "" : "s"}.`;
   } catch (error) {
     if (error.result?.code === "SHEET_CHANGED" || error.result?.code === "DRAFT_CHANGED") {
       closeMeetingEditor();
+      setMeetingSaveBusy(false);
       await loadDashboard(true);
       const banner = document.getElementById("statusBanner");
       banner.className = "status-banner warning";
       banner.textContent = error.result.code === "SHEET_CHANGED"
-        ? "Google Sheets changed first. The latest sheet data is now shown. You can edit the affected item after 1 minute."
+        ? "Google Sheets changed first. The latest sheet data is now shown. Review it and edit again."
         : "Another person changed this item while you were editing. Their latest shared value is now shown; your entry was not overwritten.";
       return;
     }
@@ -1369,7 +1338,38 @@ function render(model, meta) {
   renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
+function renderSheetPayload(payload) {
+  const rolesRows = parseCsv(payload.rolesCsv);
+  applySharedDraftsToRows(rolesRows, state.sharedDrafts);
+  state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
+  render(state.model, payload);
+  renderDraftSyncState();
+}
+
+function applyConfirmedDraft(result, meetingDate, section, updates) {
+  if (result.drafts) {
+    state.sharedDrafts = result.drafts;
+  } else {
+    // Older deployments return only field versions. Keep the old revision so
+    // polling still retrieves concurrent edits from other people.
+    const drafts = state.sharedDrafts;
+    drafts.meetings[meetingDate] ||= {};
+    drafts.meetings[meetingDate][section] ||= {};
+    Object.entries(updates).forEach(([label, value]) => {
+      if (value === (state.sheetBaseValues[meetingDate]?.[label] || "")) {
+        delete drafts.meetings[meetingDate][section][label];
+      } else {
+        drafts.meetings[meetingDate][section][label] = value;
+      }
+    });
+    drafts.fieldVersions = { ...drafts.fieldVersions, ...result.fieldVersions };
+  }
+  renderSheetPayload(state.sheetPayload);
+}
+
 async function loadDashboard(force = false) {
+  if (meetingSaveBusy) return;
+  const loadVersion = ++dashboardLoadVersion;
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
@@ -1391,25 +1391,26 @@ async function loadDashboard(force = false) {
       }
     }
     const rolesRows = parseCsv(payload.rolesCsv);
-    const agendaRows = parseCsv(payload.agendaCsv);
     if (rolesRows.length < 10) throw new Error("26_Roles is empty.");
-    captureSheetBaseValues(rolesRows);
+    let drafts;
     try {
-      state.sharedDrafts = await fetchSharedDrafts();
+      drafts = await fetchSharedDrafts();
     } catch (draftError) {
       console.warn("Shared drafts are temporarily unavailable.", draftError);
-      state.sharedDrafts = { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} };
+      drafts = state.sharedDrafts;
     }
-    applySharedDraftsToRows(rolesRows, state.sharedDrafts);
-    state.model = buildModel(rolesRows, agendaRows);
-    render(state.model, payload);
-    renderDraftSyncState();
+    if (loadVersion !== dashboardLoadVersion) return;
+    captureSheetBaseValues(rolesRows);
+    state.sheetPayload = payload;
+    state.sharedDrafts = drafts;
+    renderSheetPayload(payload);
     banner.className = "status-banner ready";
     const meeting = state.model.comingMeeting;
     banner.textContent = meeting
       ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from Google Sheets.`
       : "Updated the latest data from Google Sheets.";
   } catch (error) {
+    if (loadVersion !== dashboardLoadVersion) return;
     console.error(error);
     banner.className = "status-banner error";
     banner.textContent = `Unable to load data: ${error.message}`;
@@ -1538,10 +1539,11 @@ rolePdfDialog.addEventListener("close", () => {
 
 let sharedDraftPollBusy = false;
 async function pollSharedDrafts() {
-  if (sharedDraftPollBusy || document.hidden || !WRITE_ENDPOINT) return;
+  if (sharedDraftPollBusy || meetingSaveBusy || document.hidden || !WRITE_ENDPOINT) return;
   sharedDraftPollBusy = true;
   try {
     const latest = await fetchSharedDrafts();
+    if (meetingSaveBusy) return;
     if (Number(latest.revision || 0) === Number(state.sharedDrafts.revision || 0)) return;
     const editDialog = document.getElementById("meetingEditDialog");
     if (editDialog.open) {
@@ -1639,13 +1641,14 @@ document.querySelector("[data-special-event-tab]")?.addEventListener("click", ()
   if (canEditActiveMeeting()) openMeetingEditor("special");
 });
 function closeMeetingEditor() {
-  clearInterval(meetingLockTimer);
-  meetingLockTimer = null;
   meetingEditDialog.close();
   state.editOriginSpeechItem = null;
 }
 document.getElementById("closeMeetingEditDialog").addEventListener("click", closeMeetingEditor);
 document.getElementById("cancelMeetingEdit").addEventListener("click", closeMeetingEditor);
+meetingEditDialog.addEventListener("cancel", event => {
+  if (meetingSaveBusy) event.preventDefault();
+});
 document.getElementById("meetingEditForm").addEventListener("submit", saveMeetingEditor);
 document.getElementById("meetingEditFields").addEventListener("input", updateMeetingEditorState);
 document.getElementById("meetingEditFields").addEventListener("click", event => {
