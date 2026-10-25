@@ -119,6 +119,13 @@ main { min-height: 80vh; }
 .status-banner.error { color: #fff; background: var(--red); }
 .status-banner.warning { display: block; color: #5c3a00; background: #ffd98a; font-weight: 800; }
 .status-banner.ready { display: none; }
+.local-save-panel { margin: 12px 0; padding: 14px 20px; color: #214f69; background: #edf7fc; border: 1px solid #bfdeed; border-radius: 10px; font-size: 13px; }
+.local-save-panel[hidden], .local-save-panel [hidden] { display: none; }
+.local-save-panel p { margin: 0 0 8px; }
+.local-save-panel.has-error { color: #6e3b10; background: #fff4df; border-color: #e9c278; }
+.local-save-panel summary { cursor: pointer; }
+.local-save-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 180px; overflow: auto; }
+.local-save-panel button { margin: 10px 8px 0 0; padding: 8px 12px; border: 1px solid currentColor; border-radius: 6px; background: white; color: inherit; cursor: pointer; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .search-box { display: flex; width: min(390px, 100%); min-height: 46px; border: 1px solid var(--line); background: #fff; }

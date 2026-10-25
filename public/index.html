@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261025-1" />
+    <link rel="stylesheet" href="./styles.css?v=20261025-2" />
   </head>
   <body>
     <div class="page-shell">
@@ -47,6 +47,14 @@
         </section>
 
         <div id="statusBanner" class="status-banner" role="status">Loading the latest data from Google Sheets.</div>
+        <section id="localSavePanel" class="local-save-panel" aria-live="polite" hidden>
+          <p id="localSaveMessage"></p>
+          <details><summary>Pending edits on this device</summary><pre id="localSaveValues"></pre></details>
+          <div id="localSaveActions" hidden>
+            <button id="retryLocalSaves" type="button">Retry sync</button>
+            <button id="discardLocalSaves" type="button">Discard unsynced edits</button>
+          </div>
+        </section>
 
         <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
           <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
@@ -186,10 +194,9 @@
           <div><p id="meetingEditEyebrow">EDIT MEETING</p><h2 id="meetingEditTitle">Edit meeting</h2></div>
           <button type="button" id="closeMeetingEditDialog" class="dialog-close" aria-label="Close meeting editor">&times;</button>
         </div>
-        <p class="meeting-edit-help">Changes are saved to the shared draft first. Everyone can see them before an administrator applies them to Google Sheets.</p>
+        <p class="meeting-edit-help">Changes appear immediately on this device and sync to the shared draft in the background. Google Sheets is updated after administrator approval.</p>
         <div id="meetingEditFields" class="meeting-edit-fields"></div>
         <p id="meetingEditStatus" class="meeting-edit-status" role="status"></p>
-        <div id="meetingSaveProgress" class="meeting-save-progress" aria-hidden="true"><span></span></div>
         <div class="meeting-edit-actions">
           <button type="button" id="cancelMeetingEdit" class="secondary-button">Cancel</button>
           <button type="submit" id="saveMeetingEdit" class="primary-button"><span class="save-button-label">Save changes</span></button>
@@ -312,6 +319,7 @@
     </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
-    <script src="./app.js?v=20261025-1" defer></script>
+    <script src="./draft-sync.js?v=20261025-2" defer></script>
+    <script src="./app.js?v=20261025-2" defer></script>
   </body>
 </html>

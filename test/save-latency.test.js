@@ -42,43 +42,9 @@ test("older deployment applies confirmed values but preserves revision for polli
   assert.equal(Object.hasOwn(state.sharedDrafts.meetings["2099-01-01"].theme, "Theme"), false);
 });
 
-test("save closes on confirmation without additional sheet or draft requests", async () => {
-  const { state, context } = draftClient();
-  const status = { className: "", textContent: "" };
-  const dialog = { open: true };
-  const button = { disabled: false };
-  let confirm;
-  let calls = 0;
-  Object.assign(context, {
-    WRITE_ENDPOINT: "configured", meetingSaveBusy: false, dashboardLoadVersion: 0,
-    document: {
-      getElementById: id => id === "meetingEditDialog" ? dialog : id === "saveMeetingEdit" ? button : status,
-      querySelectorAll: () => [{ value: "Saved", dataset: { initialValue: "Original", editField: "Theme" } }],
-    },
-    canEditActiveMeeting: () => true,
-    sheetDateValue: () => "2099-01-01",
-    activeEditApiSection: () => "theme",
-    setMeetingSaveBusy: busy => { context.meetingSaveBusy = busy; },
-    apiRequest: () => { calls++; return new Promise(resolve => { confirm = resolve; }); },
-    closeMeetingEditor: () => { dialog.open = false; },
-    loadDashboard: () => { throw new Error("Save must not wait for another read"); },
-    updateMeetingEditorState: () => {},
-  });
-  state.editMeeting = {};
-  vm.runInContext(scriptPart("async function saveMeetingEditor(", "function openAdminApplyDialog("), context);
-  const first = context.saveMeetingEditor({ preventDefault() {} });
-  await context.saveMeetingEditor({ preventDefault() {} });
-  assert.equal(calls, 1, "double submit is blocked");
-  assert.equal(dialog.open, true, "do not report success before server confirmation");
-  confirm({ updated: 1, fieldVersions: { "2099-01-01|theme|Theme": 1 } });
-  await first;
-  assert.equal(dialog.open, false);
-  assert.equal(state.sharedDrafts.meetings["2099-01-01"].theme.Theme, "Saved");
-  assert.equal(context.meetingSaveBusy, false);
-});
-
 function draftService() {
   const properties = new Map();
+  const operations = new Map();
   let sheetReads = 0;
   const values = [["Date", "2099-01-01"], ["Theme", "Original"], ["Theme Question", "Question"]];
   const sheet = {
@@ -96,7 +62,7 @@ function draftService() {
       newBlob: value => ({ getBytes: () => Buffer.from(value) }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    CacheService: { getScriptCache: () => ({ put() {} }) },
+    CacheService: { getScriptCache: () => ({ get: key => operations.get(key), put: (key, value) => operations.set(key, value) }) },
     ContentService: { createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }), MimeType: { JSON: "json" } },
   });
   vm.runInContext(backend, context);
@@ -154,4 +120,12 @@ test("sheet conflict permits immediate retry after loading current values and ve
   const result = service.save({ fieldVersions: { Theme: 1 } });
   assert.equal(result.ok, true);
   assert.deepEqual(result.drafts.locks, {});
+});
+
+test("reloading or retrying the same save ID does not commit it twice", () => {
+  const service = draftService();
+  const first = service.save({ requestId: "persisted_save_123" });
+  const repeated = service.save({ requestId: "persisted_save_123" });
+  assert.deepEqual(repeated, first);
+  assert.equal(service.sheetReads, 1);
 });

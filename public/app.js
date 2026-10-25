@@ -17,7 +17,7 @@ const ROLE_EDIT_FIELDS = [
 
 async function apiRequest(payload) {
   if (!WRITE_ENDPOINT) throw new Error("The shared draft service is not configured.");
-  const requestId = `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  const requestId = payload.requestId || newSaveRequestId();
   await fetch(WRITE_ENDPOINT, {
     method: "POST",
     mode: "no-cors",
@@ -82,6 +82,7 @@ function renderDraftSyncState() {
   button.classList.toggle("pending", pending);
   button.disabled = !pending;
   button.textContent = pending ? `Apply ${entries.length} change${entries.length === 1 ? "" : "s"}` : "Google Sheet up to date";
+  renderLocalSaveState();
 }
 
 function applySharedDraftsToRows(rolesRows, drafts) {
@@ -659,7 +660,6 @@ function editFieldHtml(meeting, label) {
   return `<label class="meeting-edit-field" for="${id}"><span>${escapeHtml(label)}</span><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(value)}" maxlength="500" autocomplete="off"><button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></label>`;
 }
 
-let meetingSaveBusy = false;
 let dashboardLoadVersion = 0;
 
 function activeEditApiSection() {
@@ -671,6 +671,7 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   if (!meeting || !canEditActiveMeeting()) return;
   state.editSection = section;
   state.editMeeting = meeting;
+  state.editFieldVersions = localFieldVersions();
   state.editOriginSpeechItem = originItem;
   const titles = { theme: "Meeting theme", special: "Special Event", roles: "Role assignments", speeches: "Prepared speeches", awards: "Meeting awards" };
   setText("meetingEditEyebrow", `${formatMeetingDate(meeting.date)} MEETING · ${meeting.meetingNo || ""}`);
@@ -702,7 +703,7 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
     }).join("");
   }
   document.getElementById("meetingEditFields").innerHTML = content;
-  setText("meetingEditStatus", WRITE_ENDPOINT ? "This will update the shared draft, not Google Sheets." : "Shared draft saving is not configured.");
+  setText("meetingEditStatus", WRITE_ENDPOINT ? "Changes appear immediately and sync to the shared draft in the background." : "Shared draft saving is not configured.");
   document.getElementById("saveMeetingEdit").disabled = true;
   document.getElementById("meetingEditDialog").showModal();
   updateMeetingEditorState();
@@ -711,28 +712,12 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
 function updateMeetingEditorState() {
   const inputs = [...document.querySelectorAll("#meetingEditFields [data-edit-field]:not(:disabled)")];
   const changed = inputs.some(input => input.value.trim() !== input.dataset.initialValue);
-  document.getElementById("saveMeetingEdit").disabled = meetingSaveBusy || !WRITE_ENDPOINT || !changed;
-}
-
-function setMeetingSaveBusy(busy) {
-  meetingSaveBusy = busy;
-  const dialog = document.getElementById("meetingEditDialog");
-  const saveButton = document.getElementById("saveMeetingEdit");
-  const progress = document.getElementById("meetingSaveProgress");
-  dialog.classList.toggle("is-saving", busy);
-  dialog.setAttribute("aria-busy", String(busy));
-  progress.classList.toggle("active", busy);
-  progress.setAttribute("aria-hidden", String(!busy));
-  saveButton.classList.toggle("saving", busy);
-  saveButton.querySelector(".save-button-label").textContent = busy ? "Saving…" : "Save changes";
-  document.getElementById("cancelMeetingEdit").disabled = busy;
-  document.getElementById("closeMeetingEditDialog").disabled = busy;
+  document.getElementById("saveMeetingEdit").disabled = !WRITE_ENDPOINT || !changed;
 }
 
 async function saveMeetingEditor(event) {
   event.preventDefault();
-  if (meetingSaveBusy || !state.editMeeting || !canEditActiveMeeting()) return;
-  const saveButton = document.getElementById("saveMeetingEdit");
+  if (!document.getElementById("meetingEditDialog").open || !state.editMeeting || !canEditActiveMeeting()) return;
   const status = document.getElementById("meetingEditStatus");
   if (!WRITE_ENDPOINT) {
     status.className = "meeting-edit-status error";
@@ -746,15 +731,9 @@ async function saveMeetingEditor(event) {
   if (!Object.keys(updates).length) return;
   const apiSection = activeEditApiSection();
   const baseValues = Object.fromEntries(Object.keys(updates).map(label => [label, state.sheetBaseValues[meetingDate]?.[label] || ""]));
-  const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.sharedDrafts.fieldVersions?.[`${meetingDate}|${apiSection}|${label}`] || 0)]));
-  saveButton.disabled = true;
-  setMeetingSaveBusy(true);
-  // Ignore reads started before this save; they may contain an older draft.
-  dashboardLoadVersion += 1;
-  status.className = "meeting-edit-status";
-  status.textContent = "Saving to the shared draft… Please keep this window open.";
+  const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.editFieldVersions?.[`${meetingDate}|${apiSection}|${label}`] || 0)]));
   try {
-    const result = await apiRequest({
+    enqueueDraftSave({
       action: "saveDraft",
       meetingDate,
       section: apiSection,
@@ -762,40 +741,24 @@ async function saveMeetingEditor(event) {
       baseValues,
       fieldVersions,
     });
+    dashboardLoadVersion += 1;
     if (state.editOriginSpeechItem) {
       const editedField = Object.keys(updates)[0];
       const value = updates[editedField] || "Pending";
       state.editOriginSpeechItem.querySelector("strong").textContent = value;
       state.editOriginSpeechItem.classList.toggle("pending", value === "Pending");
     }
-    applyConfirmedDraft(result, meetingDate, apiSection, updates);
     closeMeetingEditor();
-    const banner = document.getElementById("statusBanner");
-    banner.className = "status-banner ready";
-    banner.textContent = `Saved ${result.updated} shared draft field${result.updated === 1 ? "" : "s"}.`;
+    renderSheetPayload(state.sheetPayload);
+    void flushLocalSaves();
   } catch (error) {
-    if (error.result?.code === "SHEET_CHANGED" || error.result?.code === "DRAFT_CHANGED") {
-      closeMeetingEditor();
-      setMeetingSaveBusy(false);
-      await loadDashboard(true);
-      const banner = document.getElementById("statusBanner");
-      banner.className = "status-banner warning";
-      banner.textContent = error.result.code === "SHEET_CHANGED"
-        ? "Google Sheets changed first. The latest sheet data is now shown. Review it and edit again."
-        : "Another person changed this item while you were editing. Their latest shared value is now shown; your entry was not overwritten.";
-      return;
-    }
     status.className = "meeting-edit-status error";
-    status.textContent = /Unsupported edit section|Field is not allowed/i.test(error.message)
-      ? "Unable to save: the Google Apps Script deployment is outdated. Deploy the latest apps-script/Code.gs as a new web app version, then try again."
-      : `Unable to save: ${error.message}`;
-  } finally {
-    setMeetingSaveBusy(false);
-    if (document.getElementById("meetingEditDialog").open) updateMeetingEditorState();
+    status.textContent = `Unable to save on this device: ${error.message}`;
   }
 }
 
 function openAdminApplyDialog() {
+  if (localSaves.length) return;
   const entries = sharedDraftEntries();
   if (!entries.length) return;
   state.adminApplyEntries = entries;
@@ -845,6 +808,7 @@ function updateAdminApplySelection() {
 
 async function applySharedDrafts(event) {
   event.preventDefault();
+  if (localSaves.length) return;
   const pin = document.getElementById("adminApplyPin").value;
   const status = document.getElementById("adminApplyStatus");
   const button = document.getElementById("confirmApplySheets");
@@ -1341,6 +1305,7 @@ function render(model, meta) {
 function renderSheetPayload(payload) {
   const rolesRows = parseCsv(payload.rolesCsv);
   applySharedDraftsToRows(rolesRows, state.sharedDrafts);
+  applyLocalSavesToRows(rolesRows);
   state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
   render(state.model, payload);
   renderDraftSyncState();
@@ -1368,7 +1333,6 @@ function applyConfirmedDraft(result, meetingDate, section, updates) {
 }
 
 async function loadDashboard(force = false) {
-  if (meetingSaveBusy) return;
   const loadVersion = ++dashboardLoadVersion;
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
@@ -1409,11 +1373,14 @@ async function loadDashboard(force = false) {
     banner.textContent = meeting
       ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from Google Sheets.`
       : "Updated the latest data from Google Sheets.";
+    void flushLocalSaves();
+    return true;
   } catch (error) {
     if (loadVersion !== dashboardLoadVersion) return;
     console.error(error);
     banner.className = "status-banner error";
     banner.textContent = `Unable to load data: ${error.message}`;
+    return false;
   } finally {
     button.classList.remove("loading"); button.disabled = false;
   }
@@ -1539,11 +1506,11 @@ rolePdfDialog.addEventListener("close", () => {
 
 let sharedDraftPollBusy = false;
 async function pollSharedDrafts() {
-  if (sharedDraftPollBusy || meetingSaveBusy || document.hidden || !WRITE_ENDPOINT) return;
+  if (sharedDraftPollBusy || draftSyncBusy || document.hidden || !WRITE_ENDPOINT) return;
   sharedDraftPollBusy = true;
   try {
     const latest = await fetchSharedDrafts();
-    if (meetingSaveBusy) return;
+    if (draftSyncBusy) return;
     if (Number(latest.revision || 0) === Number(state.sharedDrafts.revision || 0)) return;
     const editDialog = document.getElementById("meetingEditDialog");
     if (editDialog.open) {
@@ -1646,9 +1613,8 @@ function closeMeetingEditor() {
 }
 document.getElementById("closeMeetingEditDialog").addEventListener("click", closeMeetingEditor);
 document.getElementById("cancelMeetingEdit").addEventListener("click", closeMeetingEditor);
-meetingEditDialog.addEventListener("cancel", event => {
-  if (meetingSaveBusy) event.preventDefault();
-});
+document.getElementById("retryLocalSaves").addEventListener("click", retryLocalSaves);
+document.getElementById("discardLocalSaves").addEventListener("click", discardLocalSaves);
 document.getElementById("meetingEditForm").addEventListener("submit", saveMeetingEditor);
 document.getElementById("meetingEditFields").addEventListener("input", updateMeetingEditorState);
 document.getElementById("meetingEditFields").addEventListener("click", event => {

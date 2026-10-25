@@ -66,7 +66,7 @@ function readSheetPayload() {
 function operationResponse(request, payload) {
   const requestId = String(request?.requestId || "");
   if (/^[A-Za-z0-9_-]{8,80}$/.test(requestId)) {
-    CacheService.getScriptCache().put(`YTTM_OPERATION_${requestId}`, JSON.stringify(payload), 120);
+    CacheService.getScriptCache().put(`YTTM_OPERATION_${requestId}`, JSON.stringify(payload), 600);
   }
   return jsonResponse(payload);
 }
@@ -230,6 +230,12 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    // Reloads and retries reuse the same ID: acknowledge an already committed
+    // draft without writing it twice or creating a false version conflict.
+    if (request.action === "saveDraft" && /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
+      const previous = CacheService.getScriptCache().get(`YTTM_OPERATION_${request.requestId}`);
+      if (previous && JSON.parse(previous).ok) return jsonResponse(JSON.parse(previous));
+    }
     const context = sheetContext();
 
     if (request.action === "saveDraft") {
