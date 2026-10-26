@@ -774,7 +774,6 @@ footer p { text-align: right; }
 }
 
 @media (max-width: 430px) {
-  .brand > span:last-child { display: block; }
   .refresh-button { font-size: 0; border-radius: 50%; }
   .refresh-button span { font-size: 19px; }
   .hero { min-height: 500px; padding-left: 18px; padding-right: 18px; }
@@ -785,4 +784,18 @@ footer p { text-align: right; }
   .section-heading h2 { font-size: 36px; }
   .bar-row { grid-template-columns: 92px 1fr 22px; gap: 8px; }
   .agenda-copy strong { line-height: 1.3; }
+}
+
+@media (max-width: 900px) {
+  .topbar { gap: 12px; padding-inline: 12px; }
+  .brand-group { flex: 0 0 auto; gap: 8px; }
+  .brand-group .brand { flex: 0 0 auto; }
+  .brand-group .brand-logo { flex: 0 0 42px; width: 42px; height: 42px; }
+  .attendees-button { flex: 0 0 auto; min-width: 56px; }
+  .topbar-actions { flex: 1 1 0; min-width: 0; gap: 6px; }
+  .draft-sync-badge { display: none; }
+  .topbar-actions .apply-sheets-button { flex: 1 1 0; min-width: 0; max-width: 180px; padding: 7px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-settings-button, .refresh-button { flex: 0 0 40px; width: 40px; min-width: 40px; min-height: 40px; padding: 8px; font-size: 0; }
+  .admin-settings-button span { font-size: 17px; }
+  .refresh-button span { font-size: 19px; }
 }
