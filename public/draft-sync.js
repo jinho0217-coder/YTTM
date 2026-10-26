@@ -38,12 +38,15 @@ function localFieldVersions() {
 }
 
 function enqueueDraftSave(payload) {
-  const operation = { status: "queued", payload: { ...payload, requestId: newSaveRequestId() } };
-  localSaves.push(operation);
+  enqueueDraftSaves([payload]);
+}
+function enqueueDraftSaves(payloads) {
+  const count = localSaves.length;
+  localSaves.push(...payloads.map(payload => ({ status: "queued", payload: { ...payload, requestId: newSaveRequestId() } })));
   try {
     persistLocalSaves();
   } catch (error) {
-    localSaves.pop();
+    localSaves.splice(count);
     throw new Error("Unable to keep this edit on your device. Free browser storage and try again.");
   }
 }

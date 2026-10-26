@@ -232,3 +232,43 @@ test("evaluator suggestions fill active speeches only, keeping assigned evaluato
   assert.equal(mixed.roles.Timer,'◷ Bob');
   assert.equal(mixed.speeches['Evaluator 2'],'◷ Alice');
 });
+
+test("guest suffix round-trips identity, attendance and tentative confirmation", () => {
+  const c = client();
+  const rows = [['Date','2099-01-01'],['Chairperson','Anne (G)'],['Speaker 1','◷ Anne (G)'],['Evaluator 1','Donald']];
+  const model = c.buildModel(rows, []);
+  assert.equal(c.normalizeName('◷ Anne (G)'), 'Anne');
+  assert.equal(c.assignmentPersonName('◷ Anne (G)'), 'Anne');
+  assert.equal(c.assignmentName('◷ Anne (G)'), 'Anne (G)');
+  assert.equal(c.guestAssignment('◷ Anne (G)', false), '◷ Anne');
+  assert.equal(c.guestAssignment('◷ Anne', true), '◷ Anne (G)');
+  assert.equal(c.meetingAttendees(model, model.columns[0]).find(p => p.name === 'Anne').guest, true);
+  assert.equal(c.isGuestAssignment('Anne', model, model.columns[0]), true);
+  assert.equal(c.isGuestAssignment('Donald', model, model.columns[0]), false);
+});
+
+test("Guest and Member toggles update all matching roles and speeches together", () => {
+  const c = client();
+  c.rows = [['Date','2099-01-01'],['Chairperson','Anne'],['Speaker 1','◷ Anne'],['Evaluator 1','Donald'],['Attendees','']];
+  vm.runInContext('state.model = buildModel(rows, []); state.meetingOffset = 0; state.model.comingMeetingIndex = 0;', c);
+  c.editableValue = (meeting, label) => c.rows.find(row => row[0] === label)?.[meeting.col] || '';
+  let groups;
+  c.savePeopleUpdateGroups = value => { groups = value; };
+  c.updateAttendee('Anne', 'guest');
+  assert.equal(groups.roles.Chairperson, 'Anne (G)');
+  assert.equal(groups.speeches['Speaker 1'], '◷ Anne (G)');
+  assert.equal(groups.speeches['Evaluator 1'], undefined);
+  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, true);
+  c.rows[1][1] = 'Anne (G)';
+  c.rows[2][1] = '◷ Anne (G)';
+  c.rows[4][1] = groups.attendees.Attendees;
+  vm.runInContext('state.model = buildModel(rows, []); state.model.comingMeetingIndex = 0;', c);
+  c.updateAttendee('Anne', 'guest');
+  assert.equal(groups.roles.Chairperson, 'Anne');
+  assert.equal(groups.speeches['Speaker 1'], '◷ Anne');
+  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, false);
+  c.document = {querySelector: () => ({getAttribute: () => 'false'})};
+  c.CSS = {escape: value => value};
+  assert.equal(c.assignmentInputValue({value:'Anne', dataset:{editField:'Timer'}}), 'Anne (G)');
+  assert.equal(c.assignmentInputValue({value:'Donald', dataset:{editField:'Timer'}}), 'Donald');
+});

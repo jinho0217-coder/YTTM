@@ -168,3 +168,17 @@ test("server rerender overlays locally cleared fields and pending edits in order
   c.context.applyLocalSavesToRows(rows);
   assert.equal(rows[1][1], "");
 });
+
+test("grouped guest changes are durable together or leave no partial local save", () => {
+  const c = client();
+  const payloads = [
+    {action:'saveDraft',meetingDate:'2099-01-01',section:'attendees',updates:{Attendees:'[]'}},
+    {action:'saveDraft',meetingDate:'2099-01-01',section:'roles',updates:{Timer:'Anne (G)'}}
+  ];
+  c.context.enqueueDraftSaves(payloads);
+  assert.equal(c.context.queue.length, 2);
+  assert.equal(JSON.parse([...c.storage.values()][0]).length, 2);
+  c.context.localStorage.setItem = () => { throw new Error('Quota'); };
+  assert.throws(() => c.context.enqueueDraftSaves(payloads), /Unable to keep/);
+  assert.equal(c.context.queue.length, 2);
+});

@@ -2,6 +2,24 @@
 const TENTATIVE_PREFIX = "◷ ";
 function isTentative(value) { return /^◷\s/.test(clean(value)); }
 function assignmentName(value) { return clean(value).replace(/^◷\s+/, ""); }
+function hasGuestSuffix(value) { return /\s*\(G\)\s*$/i.test(clean(value)); }
+function assignmentPersonName(value) { return assignmentName(value).replace(/\s*\(G\)\s*$/i, "").trim(); }
+function guestAssignment(value, guest) {
+  const name = assignmentPersonName(value);
+  return name ? `${isTentative(value) ? TENTATIVE_PREFIX : ""}${name}${guest ? " (G)" : ""}` : "";
+}
+function isGuestAssignment(value, model = state.model, meeting = activeMeeting()) {
+  if (hasGuestSuffix(value)) return true;
+  const name = normalizeName(value).toLocaleLowerCase();
+  if (!name || !model || !meeting) return false;
+  const person = readAttendees(model.rowsByLabel.get("Attendees")?.row[meeting.col]).find(p => normalizeName(p.name).toLocaleLowerCase() === name);
+  if (person?.guest) return true;
+  return [...model.rowsByLabel].some(([label, { row }]) => isAssignmentField(label) && normalizeName(row[meeting.col]).toLocaleLowerCase() === name && hasGuestSuffix(row[meeting.col]));
+}
+function guestRoleIcon(value) {
+  if (!isGuestAssignment(value)) return "";
+  return '<svg class="role-guest-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" role="img" aria-label="Guest"><title>Guest</title><circle cx="9" cy="7" r="3.5"/><path d="M2.5 21v-3.5a6.5 6.5 0 0 1 13 0V21M19 7v6m-3-3h6"/></svg>';
+}
 function isAssignmentField(label) { return ROLE_EDIT_FIELDS.includes(label) || /^(Speaker|Evaluator) [1-4]$/.test(label); }
 function confirmedAssignment(value) { return Boolean(normalizeName(value)) && !isTentative(value); }
 function confirmDueAssignmentRows(rows, now = new Date()) {
@@ -14,7 +32,7 @@ function confirmDueAssignmentRows(rows, now = new Date()) {
   });
 }
 function assignmentInputValue(input) {
-  const name = assignmentName(input.value);
+  const name = assignmentName(guestAssignment(input.value, isGuestAssignment(input.value)));
   const toggle = document.querySelector(`[data-tentative-field="${CSS.escape(input.dataset.editField)}"]`);
   return name && toggle?.getAttribute("aria-pressed") === "true" ? TENTATIVE_PREFIX + name : name;
 }
@@ -32,13 +50,16 @@ function displayAssignment(value) {
 }
 
 function savePeopleUpdates(section, updates, expectedVersions = localFieldVersions()) {
+  savePeopleUpdateGroups({ [section]: updates }, expectedVersions);
+}
+function savePeopleUpdateGroups(groups, expectedVersions = localFieldVersions()) {
   const meeting = activeMeeting();
   if (!meeting || meeting.noMeeting || !canEditActiveMeeting() || !WRITE_ENDPOINT) throw new Error("현재 모임은 수정할 수 없습니다.");
   const meetingDate = sheetDateValue(meeting.date);
-  enqueueDraftSave({ action: "saveDraft", meetingDate, section, updates,
+  enqueueDraftSaves(Object.entries(groups).filter(([, updates]) => Object.keys(updates).length).map(([section, updates]) => ({ action: "saveDraft", meetingDate, section, updates,
     baseValues: Object.fromEntries(Object.keys(updates).map(label => [label, state.sheetBaseValues[meetingDate]?.[label] || ""])),
     fieldVersions: Object.fromEntries(Object.keys(updates).map(label => [label, Number(expectedVersions[`${meetingDate}|${section}|${label}`] || 0)])),
-  });
+  })));
   dashboardLoadVersion += 1;
   renderSheetPayload(state.sheetPayload);
   void flushLocalSaves();
@@ -68,6 +89,7 @@ function meetingAttendees(model, meeting, { includeTentative = false } = {}) {
       if (!includeTentative) return;
     }
     if (!people.has(key)) people.set(key, { name, guest: false, manual: false, roles: [] });
+    if (hasGuestSuffix(row[meeting.col])) people.get(key).guest = true;
     people.get(key).roles.push({ label, tentative: isTentative(row[meeting.col]) });
   });
   return [...people.values()].filter(person => includeTentative || person.roles.length || !tentativeNames.has(person.name.toLocaleLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
@@ -103,8 +125,9 @@ function updateAttendee(name, action) {
   const index = people.findIndex(p => (normalizeName(p.name) || clean(p.name)).toLocaleLowerCase() === normalized.toLocaleLowerCase());
   if (action === "remove") { if (index >= 0) people.splice(index, 1); }
   else if (action === "guest") {
-    if (index >= 0) people[index].guest = !people[index].guest;
-    else people.push({ name: normalized, guest: true });
+    const guest = !isGuestAssignment(normalized);
+    if (index >= 0) people[index].guest = guest;
+    else people.push({ name: normalized, guest });
   } else {
     const assigned = meetingAttendees(state.model, meeting, { includeTentative: true }).find(person => person.name.toLocaleLowerCase() === normalized.toLocaleLowerCase());
     if (assigned?.roles.length && assigned.roles.every(role => role.tentative)) throw new Error("예정 역할을 확정하면 참석자 명단에 표시됩니다.");
@@ -112,7 +135,17 @@ function updateAttendee(name, action) {
     people.push({ name: normalized, guest: document.getElementById("newAttendeeGuest").getAttribute("aria-pressed") === "true" });
   }
   if (people.length > 80) throw new Error("참석자는 최대 80명까지 추가할 수 있습니다.");
-  savePeopleUpdates("attendees", { Attendees: people.length ? JSON.stringify(people) : "" }, state.attendeesVersions);
+  const groups = { attendees: { Attendees: people.length ? JSON.stringify(people) : "" } };
+  if (action === "guest") {
+    const guest = people.find(p => normalizeName(p.name).toLocaleLowerCase() === normalized.toLocaleLowerCase()).guest;
+    state.model.rowsByLabel.forEach(({ row }, label) => {
+      if (!isAssignmentField(label) || normalizeName(row[meeting.col]).toLocaleLowerCase() !== normalized.toLocaleLowerCase()) return;
+      const section = /^(Speaker|Evaluator) /.test(label) ? "speeches" : "roles";
+      const value = guestAssignment(row[meeting.col], guest);
+      if (value !== row[meeting.col]) (groups[section] ||= {})[label] = value;
+    });
+  }
+  savePeopleUpdateGroups(groups, state.attendeesVersions);
 }
 function setNewAttendeeGuest(guest) {
   const button = document.getElementById("newAttendeeGuest");

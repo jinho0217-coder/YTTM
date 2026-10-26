@@ -577,7 +577,7 @@ function showRoleDetails(assignment) {
   setText("agendaDialogEyebrow", "ROLE RESPONSIBILITIES");
   setText("agendaDialogTitle", assignment.role);
   document.getElementById("agendaDialogDetails").innerHTML = `
-    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}</strong></p><span data-inline-edit-slot></span></div>
+    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}${guestRoleIcon(assignment.rawValue)}</strong></p><span data-inline-edit-slot></span></div>
     <ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
   configureDetailsEditor("roles", assignment.role);
   document.getElementById("agendaDetailsDialog").showModal();
@@ -666,7 +666,7 @@ function editableValue(meeting, label) {
 function editFieldHtml(meeting, label) {
   const value = editableValue(meeting, label);
   const assignment = isAssignmentField(label);
-  const inputValue = assignment ? assignmentName(value) : value;
+  const inputValue = assignment ? assignmentPersonName(value) : value;
   const id = `edit-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return `<div class="meeting-edit-field"><label for="${id}">${escapeHtml(label)}</label><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(inputValue)}" maxlength="${assignment ? 498 : 500}" autocomplete="off">${assignment ? `<button type="button" class="tentative-toggle" data-tentative-field="${escapeHtml(label)}" aria-pressed="${isTentative(value)}" title="예정 배정" aria-label="${escapeHtml(label)} 예정 배정">◷</button>` : ""}<button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></div>`;
 }
@@ -1218,7 +1218,7 @@ function renderThisWeek(model) {
     assignments.push({ role, sourceLabel: label, rawValue: row[meeting.col], member: member || "Pending", pending: !member });
   });
   const assignmentContainer = document.getElementById("weekAssignments");
-  assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<div class="assignment-wrap"><button type="button" class="assignment ${item.pending ? "pending" : ""} ${isTentative(item.rawValue) ? "tentative" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></button>${tentativeIcon(item.sourceLabel, item.rawValue)}</div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
+  assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<div class="assignment-wrap"><button type="button" class="assignment ${item.pending ? "pending" : ""} ${isTentative(item.rawValue) ? "tentative" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}${guestRoleIcon(item.rawValue)}</strong></button>${tentativeIcon(item.sourceLabel, item.rawValue)}</div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
     const assignment = assignments[Number(button.dataset.assignmentIndex)];
     button.addEventListener("click", () => showRoleDetails(assignment));
@@ -1245,7 +1245,7 @@ function renderThisWeek(model) {
     });
   }
   const weekContainer = document.getElementById("weekSpeeches");
-  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open speech details for ${escapeHtml(s.speaker)}"><span class="speaker">${tentativeIcon(`Speaker ${s.slot}`, s.speakerRaw)}${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>Evaluator · ${tentativeIcon(`Evaluator ${s.slot}`, s.evaluatorRaw)}${escapeHtml(s.evaluator)}</p></article>`).join("");
+  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open speech details for ${escapeHtml(s.speaker)}"><span class="speaker">${tentativeIcon(`Speaker ${s.slot}`, s.speakerRaw)}${escapeHtml(s.speaker)}${guestRoleIcon(s.speakerRaw)}</span><h4>${escapeHtml(s.title)}</h4><p>Evaluator · ${tentativeIcon(`Evaluator ${s.slot}`, s.evaluatorRaw)}${escapeHtml(s.evaluator)}${guestRoleIcon(s.evaluatorRaw)}</p></article>`).join("");
   weekContainer.querySelectorAll(".week-speech").forEach((card, index) => {
     const speech = weekSpeeches[index];
     addTooltip(card, `${speech.speaker} · ${speech.title}\nProject: ${speech.project || "—"}\nTime: ${speech.time || "—"}\nEvaluator: ${speech.evaluator || "—"}`);
@@ -1292,7 +1292,7 @@ function showSpeechDetails(speech) {
   document.getElementById("speechDialogDetails").innerHTML = details.map(([label, value]) => {
     const tag = editable ? "button" : "div";
     const field = `${label} ${speech.slot}`;
-    return `<${tag} ${editable ? `type="button" data-speech-field="${escapeHtml(field)}"` : ""} class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></${tag}>`;
+    return `<${tag} ${editable ? `type="button" data-speech-field="${escapeHtml(field)}"` : ""} class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}${label === "Speaker" ? guestRoleIcon(speech.speakerRaw) : label === "Evaluator" ? guestRoleIcon(speech.evaluatorRaw) : ""}</strong></${tag}>`;
   }).join("");
   document.querySelectorAll("#speechDialogDetails [data-speech-field]").forEach(item => {
     item.addEventListener("click", event => {

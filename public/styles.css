@@ -813,3 +813,6 @@ footer p { text-align: right; }
   .topbar-actions { gap: 4px; }
   .topbar-actions .apply-sheets-button, .admin-settings-button, .refresh-button { flex-basis: 34px; width: 34px; min-width: 34px; max-width: 34px; }
 }
+
+.role-guest-icon { display: inline-block; width: 14px; height: 14px; margin-left: 6px; vertical-align: -1px; color: var(--blue); flex-shrink: 0; }
+.week-speech .role-guest-icon { color: #edc15e; }
