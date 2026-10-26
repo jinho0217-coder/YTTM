@@ -21,6 +21,30 @@ test("tentative names preserve identity and never count as confirmed", () => {
   assert.equal(c.confirmedAssignment(""), false);
   assert.equal(c.assignmentName("◷ Jin"), "Jin");
 });
+
+test("manual names save as confirmed unless tentative is explicitly enabled after typing", () => {
+  const c = client();
+  let pressed = 'false';
+  const toggle = { getAttribute: () => pressed, setAttribute: (_, value) => { pressed = value; } };
+  c.document = { querySelector: () => toggle };
+  c.CSS = { escape: value => value };
+  for (const label of ['Timer', 'Speaker 1', 'Evaluator 2']) {
+    const input = { value: 'Jin', dataset: { editField: label } };
+    pressed = 'false';
+    assert.equal(c.assignmentInputValue(input), 'Jin', 'new manual assignments default to confirmed');
+    pressed = 'true';
+    assert.equal(c.assignmentInputValue(input), '◷ Jin', 'untouched existing tentative assignments are preserved');
+    input.value = 'Joy';
+    c.resetTentativeAssignment(input);
+    assert.equal(c.assignmentInputValue(input), 'Joy', 'typing a replacement removes the tentative status');
+    pressed = 'true';
+    assert.equal(c.assignmentInputValue(input), '◷ Joy', 'explicit activation after typing restores tentative status');
+    input.value = '';
+    c.resetTentativeAssignment(input);
+    assert.equal(pressed, 'false');
+    assert.equal(c.assignmentInputValue(input), '');
+  }
+});
 test("attendees merge aliases and multiple roles, keep guests without roles, and isolate meeting dates", () => {
   const c = client();
   const rows = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "◷ Jin", "Other"], ["Speaker 1", "Jin", ""], ["Timer", "Shilry", ""], ["Attendees", JSON.stringify([{ name: "Guest", guest: true }, { name: "Shirly", guest: true }]), ""]];

@@ -1639,7 +1639,10 @@ document.getElementById("cancelMeetingEdit").addEventListener("click", closeMeet
 document.getElementById("retryLocalSaves").addEventListener("click", retryLocalSaves);
 document.getElementById("discardLocalSaves").addEventListener("click", discardLocalSaves);
 document.getElementById("meetingEditForm").addEventListener("submit", saveMeetingEditor);
-document.getElementById("meetingEditFields").addEventListener("input", updateMeetingEditorState);
+document.getElementById("meetingEditFields").addEventListener("input", event => {
+  resetTentativeAssignment(event.target);
+  updateMeetingEditorState();
+});
 document.getElementById("meetingEditFields").addEventListener("click", event => {
   const toggle = event.target.closest("[data-tentative-field]");
   if (toggle) {
@@ -1650,7 +1653,7 @@ document.getElementById("meetingEditFields").addEventListener("click", event => 
   const clearButton = event.target.closest("[data-clear-field]");
   if (!clearButton) return;
   const input = document.querySelector(`#meetingEditFields [data-edit-field="${CSS.escape(clearButton.dataset.clearField)}"]`);
-  if (input) { input.value = ""; input.focus(); updateMeetingEditorState(); }
+  if (input) { input.value = ""; resetTentativeAssignment(input); input.focus(); updateMeetingEditorState(); }
 });
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => {

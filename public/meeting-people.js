@@ -19,6 +19,11 @@ function assignmentInputValue(input) {
   const toggle = document.querySelector(`[data-tentative-field="${CSS.escape(input.dataset.editField)}"]`);
   return name && toggle?.getAttribute("aria-pressed") === "true" ? TENTATIVE_PREFIX + name : name;
 }
+function resetTentativeAssignment(input) {
+  if (!isAssignmentField(input?.dataset?.editField || "")) return;
+  const toggle = document.querySelector(`[data-tentative-field="${CSS.escape(input.dataset.editField)}"]`);
+  toggle?.setAttribute("aria-pressed", "false");
+}
 function tentativeIcon(label, value) {
   if (!isTentative(value)) return "";
   return `<button type="button" class="tentative-icon" data-assignment-status="${escapeHtml(label)}" title="예정 · 클릭하여 확정 또는 삭제" aria-label="${escapeHtml(label)} 예정 배정 변경" aria-haspopup="dialog">◷</button>`;
