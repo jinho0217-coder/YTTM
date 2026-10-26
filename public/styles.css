@@ -24,6 +24,14 @@
 .attendees-button span { font-size: 13px; font-weight: 700; }
 .people-dialog { width: min(620px, calc(100vw - 28px)); max-height: 85dvh; padding: 0; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
 .people-dialog::backdrop { background: #16232b99; backdrop-filter: blur(3px); }
+#attendeesDialog { transform-origin: top left; will-change: transform, opacity; }
+#attendeesDialog[open]::backdrop { animation: attendees-backdrop-in 320ms ease-out both; }
+#attendeesDialog.attendees-closing::backdrop { animation: attendees-backdrop-out 240ms ease-in both; }
+@keyframes attendees-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes attendees-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #attendeesDialog[open]::backdrop { animation: none; }
+}
 .attendee-form { display: flex; gap: 8px; padding: 18px 24px; }
 .attendee-form[hidden] { display: none; }
 .attendee-form input { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--paper); }
