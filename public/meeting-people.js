@@ -54,20 +54,24 @@ function readAttendees(value) {
 function meetingAttendees(model, meeting, { includeTentative = false } = {}) {
   if (!meeting || meeting.noMeeting) return [];
   const people = new Map();
+  const tentativeNames = new Set();
   readAttendees(model.rowsByLabel.get("Attendees")?.row[meeting.col]).forEach(person => {
     const name = normalizeName(person.name) || clean(person.name);
     people.set(name.toLocaleLowerCase(), { name, guest: person.guest, manual: true, roles: [] });
   });
   model.rowsByLabel.forEach(({ row }, label) => {
     if (!isRoleRow(label)) return;
-    if (!includeTentative && isTentative(row[meeting.col])) return;
     const name = normalizeName(row[meeting.col]);
     if (!name) return;
     const key = name.toLocaleLowerCase();
+    if (isTentative(row[meeting.col])) {
+      tentativeNames.add(key);
+      if (!includeTentative) return;
+    }
     if (!people.has(key)) people.set(key, { name, guest: false, manual: false, roles: [] });
     people.get(key).roles.push({ label, tentative: isTentative(row[meeting.col]) });
   });
-  return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...people.values()].filter(person => includeTentative || person.roles.length || !tentativeNames.has(person.name.toLocaleLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
 }
 function renderAttendees() {
   const meeting = activeMeeting();
@@ -103,6 +107,8 @@ function updateAttendee(name, action) {
     if (index >= 0) people[index].guest = !people[index].guest;
     else people.push({ name: normalized, guest: true });
   } else {
+    const assigned = meetingAttendees(state.model, meeting, { includeTentative: true }).find(person => person.name.toLocaleLowerCase() === normalized.toLocaleLowerCase());
+    if (assigned?.roles.length && assigned.roles.every(role => role.tentative)) throw new Error("예정 역할을 확정하면 참석자 명단에 표시됩니다.");
     if (meetingAttendees(state.model, meeting).some(p => p.name.toLocaleLowerCase() === normalized.toLocaleLowerCase())) throw new Error("이미 명단에 있는 이름입니다.");
     people.push({ name: normalized, guest: document.getElementById("newAttendeeGuest").getAttribute("aria-pressed") === "true" });
   }

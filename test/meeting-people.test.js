@@ -61,19 +61,22 @@ test("attendees merge aliases and multiple roles, keep guests without roles, and
   assert.equal(c.meetingAttendees(model, { ...model.columns[0], noMeeting: true }).length, 0);
 });
 
-test("attendance excludes tentative roles but preserves explicit attendees and confirmed roles", () => {
+test("tentative-only people are excluded even with an explicit attendance record", () => {
   const c = client();
   const rows = [['Date','2099-01-01'],['Chairperson','◷ Alice'],['Timer','Bob'],['Speaker 1','◷ Bob'],['Evaluator 1','◷ Carol'],['Grammarian','◷ Dave'],['Attendees','[{"name":"Dave","guest":false},{"name":"Guest","guest":true}]']];
   let model = c.buildModel(rows, []);
   let people = c.meetingAttendees(model, model.columns[0]);
-  assert.deepEqual(Array.from(people, person => person.name), ['Bob','Dave','Guest']);
+  assert.deepEqual(Array.from(people, person => person.name), ['Bob','Guest']);
   assert.deepEqual(Array.from(people.find(person => person.name === 'Bob').roles, role => role.label), ['Timer']);
-  assert.equal(people.find(person => person.name === 'Dave').roles.length, 0);
+  assert.equal(people.some(person => person.name === 'Dave'), false);
   assert.equal(c.meetingAttendees(model, model.columns[0], {includeTentative:true}).length, 5);
   rows[1][1] = 'Alice';
   model = c.buildModel(rows, []);
   people = c.meetingAttendees(model, model.columns[0]);
   assert.equal(people.filter(person => person.name === 'Alice').length, 1, 'confirming adds the attendee exactly once');
+  rows[4][1] = 'Dave';
+  model = c.buildModel(rows, []);
+  assert.equal(c.meetingAttendees(model, model.columns[0]).filter(person => person.name === 'Dave').length, 1, 'confirming restores a manually recorded person exactly once');
 });
 
 test("hidden tentative assignees remain reserved when suggesting other roles", () => {
