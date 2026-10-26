@@ -1322,6 +1322,7 @@ function renderSheetPayload(payload) {
   const rolesRows = parseCsv(payload.rolesCsv);
   applySharedDraftsToRows(rolesRows, state.sharedDrafts);
   applyLocalSavesToRows(rolesRows);
+  confirmDueAssignmentRows(rolesRows);
   state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
   render(state.model, payload);
   renderDraftSyncState();
@@ -1521,7 +1522,13 @@ rolePdfDialog.addEventListener("close", () => {
 });
 
 let sharedDraftPollBusy = false;
+let displayedMeetingDay = sheetDateValue(todayKst());
 async function pollSharedDrafts() {
+  const currentDay = sheetDateValue(todayKst());
+  if (currentDay !== displayedMeetingDay && state.sheetPayload) {
+    displayedMeetingDay = currentDay;
+    renderSheetPayload(state.sheetPayload);
+  }
   if (sharedDraftPollBusy || draftSyncBusy || document.hidden || !WRITE_ENDPOINT) return;
   sharedDraftPollBusy = true;
   try {

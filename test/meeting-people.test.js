@@ -66,8 +66,52 @@ function service() {
     ContentService: { createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }), MimeType: { JSON: "json" } },
   });
   vm.runInContext(read("apps-script/Code.gs"), context);
-  return { context, values, post: body => context.doPost({ postData: { contents: JSON.stringify(body) } }) };
+  return { context, values, properties, post: body => context.doPost({ postData: { contents: JSON.stringify(body) } }) };
 }
+
+test("automatic confirmation starts exactly at midnight in Korea, preserving future dates and no-meeting dates", () => {
+  const c = client();
+  const rows = [["Date", "2026-11-01", "2026-11-08", "2026-10-25"], ['Chairperson', '◷ Jin', '◷ Next', '◷ Absent'], ['Speaker 1', '◷ Anne', '', ''], ['Special Event', '', '', 'No Meeting'], ['Theme', '◷ Theme', '', '']];
+  c.confirmDueAssignmentRows(rows, new Date('2026-10-31T14:59:59Z'));
+  assert.equal(rows[1][1], '◷ Jin');
+  c.confirmDueAssignmentRows(rows, new Date('2026-10-31T15:00:00Z'));
+  assert.equal(rows[1][1], 'Jin');
+  assert.equal(rows[2][1], 'Anne');
+  assert.equal(rows[1][2], '◷ Next');
+  assert.equal(rows[1][3], '◷ Absent');
+  assert.equal(rows[4][1], '◷ Theme');
+});
+
+test("automatic confirmation persists approved statuses but keeps unapproved names in the shared draft", () => {
+  const s = service();
+  s.values[0] = ['Date', '2026-10-26', '2099-01-08'];
+  s.values[1] = ['Chairperson', '◷ Jin', '◷ Other'];
+  s.values.push(['Timer', '', ''], ['Speaker 1', '◷ Anne', '']);
+  const drafts = { revision: 1, meetings: { '2026-10-26': { roles: { Chairperson: '◷ Replacement', Timer: '◷ Joy' } } }, bases: { '2026-10-26': { roles: { Chairperson: '◷ Jin', Timer: '' } } }, fieldVersions: {} };
+  const result = s.context.confirmDueAssignments(s.context.sheetContext(), drafts, '2026-10-26');
+  assert.equal(s.values[1][1], 'Jin');
+  assert.equal(s.values[1][2], '◷ Other');
+  assert.equal(s.values[2][1], '', 'unapproved names cannot be written to Sheets');
+  assert.equal(s.values[3][1], 'Anne');
+  assert.equal(result.meetings['2026-10-26'].roles.Timer, 'Joy');
+  assert.equal(result.meetings['2026-10-26'].roles.Chairperson, 'Replacement');
+  assert.equal(result.bases['2026-10-26'].roles.Chairperson, 'Jin');
+  assert.equal(result.fieldVersions['2026-10-26|roles|Timer'], 1);
+  assert.equal(JSON.parse(s.properties.get('YTTM_SHARED_DRAFTS')).revision, 2);
+  assert.equal(s.context.confirmDueAssignments(s.context.sheetContext(), result, '2026-10-26').revision, 2, 'repeat reads must not change versions');
+});
+
+test("automatic confirmation respects cleared drafts and does not write tentative status on a due date", () => {
+  const s = service();
+  s.values[0][1] = '2026-10-26';
+  s.values[1][1] = '◷ Jin';
+  const drafts = { revision: 0, meetings: { '2026-10-26': { roles: { Chairperson: '' } } }, bases: { '2026-10-26': { roles: { Chairperson: '◷ Jin' } } }, fieldVersions: {} };
+  s.context.confirmDueAssignments(s.context.sheetContext(), drafts, '2026-10-26');
+  assert.equal(drafts.meetings['2026-10-26'].roles.Chairperson, '');
+  const result = s.post({action:'saveDraft', meetingDate:'2026-10-26', section:'roles',updates:{Chairperson:'◷ New'},baseValues:{Chairperson:'Jin'},fieldVersions:{Chairperson:1}});
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.drafts.meetings['2026-10-26'].roles.Chairperson, 'New');
+});
 test("attendee drafts wait for administrator approval and create only one row for multiple meetings", () => {
   const s = service();
   const value = JSON.stringify([{ name: "Guest", guest: true }]);

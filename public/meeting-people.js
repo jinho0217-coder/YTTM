@@ -5,6 +5,15 @@ function isTentative(value) { return /^◷\s/.test(clean(value)); }
 function assignmentName(value) { return clean(value).replace(/^◷\s+/, ""); }
 function isAssignmentField(label) { return ROLE_EDIT_FIELDS.includes(label) || /^(Speaker|Evaluator) [1-4]$/.test(label); }
 function confirmedAssignment(value) { return Boolean(normalizeName(value)) && !isTentative(value); }
+function confirmDueAssignmentRows(rows, now = new Date()) {
+  const today = todayKst(now);
+  const mapped = rowMap(rows);
+  (rows[0] || []).forEach((value, col) => {
+    const date = parseDate(value);
+    if (!date || date > today || /no meeting/i.test(`${mapped.get('Special Event')?.row[col] || ''} ${mapped.get('Chairperson')?.row[col] || ''}`)) return;
+    rows.forEach(row => { if (isAssignmentField(clean(row[0]))) row[col] = assignmentName(row[col]); });
+  });
+}
 function assignmentInputValue(input) {
   const name = assignmentName(input.value);
   const toggle = document.querySelector(`[data-tentative-field="${CSS.escape(input.dataset.editField)}"]`);

@@ -107,7 +107,82 @@ function sheetContext() {
   const previousCandidates = columns.filter(item => item.date < referenceDate && !item.noMeeting);
   const previousMeeting = previousCandidates[previousCandidates.length - 1] || null;
   const allowedMeetings = columns.filter(item => item.date >= referenceDate || item.column === previousMeeting?.column).map(({ date, column }) => ({ date, column }));
-  return { sheet, values, rowByLabel, allowedMeetings };
+  return { sheet, values, rowByLabel, allowedMeetings, columns };
+}
+
+function assignmentSection(label) {
+  if (/^(Speaker|Evaluator) [1-4]$/.test(label)) return "speeches";
+  return EDITABLE_FIELDS.roles.includes(label) && !EDITABLE_FIELDS.awards.includes(label) ? "roles" : "";
+}
+
+function confirmedValueOnDate(label, value, meetingDate, today) {
+  return assignmentSection(label) && meetingDate <= today ? String(value).replace(/^◷\s+/, "") : value;
+}
+
+// Only the status changes automatically. Unapproved names remain in the draft.
+function confirmDueAssignments(context, drafts, today) {
+  const writes = [], audit = [];
+  context.columns.filter(column => column.date <= today && !column.noMeeting).forEach(column => {
+    context.rowByLabel.forEach((row, label) => {
+      const section = assignmentSection(label);
+      if (!section) return;
+      const original = String(context.values[row - 1]?.[column.column - 1] ?? "").trim();
+      const confirmed = confirmedValueOnDate(label, original, column.date, today);
+      const updates = drafts.meetings[column.date]?.[section];
+      const draftValue = updates?.[label];
+      const nextDraft = draftValue === undefined ? undefined : confirmedValueOnDate(label, draftValue, column.date, today);
+      if (original === confirmed && draftValue === nextDraft) return;
+      if (original !== confirmed) {
+        const range = context.sheet.getRange(row, column.column);
+        if (range.getFormula?.()) return;
+        writes.push({ row, column: column.column, original, value: confirmed });
+        if (drafts.bases[column.date]?.[section]?.[label] === original) drafts.bases[column.date][section][label] = confirmed;
+      }
+      if (updates && draftValue !== undefined) {
+        if (nextDraft === confirmed) {
+          delete updates[label];
+          if (drafts.bases[column.date]?.[section]) delete drafts.bases[column.date][section][label];
+        } else updates[label] = nextDraft;
+        if (!Object.keys(updates).length) delete drafts.meetings[column.date][section];
+        if (!Object.keys(drafts.meetings[column.date]).length) delete drafts.meetings[column.date];
+      }
+      const key = fieldKey(column.date, section, label);
+      drafts.fieldVersions[key] = Number(drafts.fieldVersions[key] || 0) + 1;
+      audit.push({ at: new Date().toISOString(), action: "auto-confirm", meetingDate: column.date, section, label, value: nextDraft ?? confirmed });
+    });
+  });
+  if (!audit.length) return drafts;
+  let completed = 0;
+  try {
+    writes.forEach(item => {
+      context.sheet.getRange(item.row, item.column).setValue(item.value.startsWith("=") ? "'" + item.value : item.value);
+      completed += 1;
+    });
+    if (writes.length) SpreadsheetApp.flush();
+    writeDrafts(drafts);
+  } catch (error) {
+    for (let index = completed - 1; index >= 0; index -= 1) {
+      try { context.sheet.getRange(writes[index].row, writes[index].column).setValue(writes[index].original); } catch (_) {}
+    }
+    if (completed) SpreadsheetApp.flush();
+    throw error;
+  }
+  writes.forEach(item => { context.values[item.row - 1][item.column - 1] = item.value; });
+  appendAudit(audit);
+  return drafts;
+}
+
+function refreshAutomaticConfirmations() {
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
+  const cache = CacheService.getScriptCache();
+  if (cache.get("YTTM_AUTO_CONFIRM_DAY") === today) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    if (cache.get("YTTM_AUTO_CONFIRM_DAY") === today) return;
+    confirmDueAssignments(sheetContext(), readDrafts(), today);
+    cache.put("YTTM_AUTO_CONFIRM_DAY", today, 300);
+  } finally { lock.releaseLock(); }
 }
 
 function emptyDrafts() {
@@ -220,6 +295,7 @@ function doGet(event) {
   const callback = String(event?.parameter?.callback || "");
   if (action === "getSheets") {
     try {
+      refreshAutomaticConfirmations();
       return webResponse(readSheetPayload(), callback);
     } catch (error) {
       return webResponse({ ok: false, error: error.message || String(error) }, callback);
@@ -230,8 +306,12 @@ function doGet(event) {
     const raw = /^[A-Za-z0-9_-]{8,80}$/.test(requestId) ? CacheService.getScriptCache().get(`YTTM_OPERATION_${requestId}`) : "";
     return webResponse(raw ? JSON.parse(raw) : { ok: false, pending: true }, callback);
   }
-  const drafts = readDrafts();
-  return webResponse({ ok: true, drafts }, callback);
+  try {
+    refreshAutomaticConfirmations();
+    return webResponse({ ok: true, drafts: readDrafts() }, callback);
+  } catch (error) {
+    return webResponse({ ok: false, error: error.message || String(error) }, callback);
+  }
 }
 
 function doPost(event) {
@@ -247,10 +327,13 @@ function doPost(event) {
       if (previous && JSON.parse(previous).ok) return jsonResponse(JSON.parse(previous));
     }
     const context = sheetContext();
+    const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
+    confirmDueAssignments(context, readDrafts(), today);
 
     if (request.action === "saveDraft") {
       const target = requireAllowedMeeting(context, request.meetingDate);
       const updates = validatedUpdates(request.section, request.updates);
+      Object.keys(updates).forEach(label => { updates[label] = confirmedValueOnDate(label, updates[label], target.date, today); });
       const drafts = readDrafts();
       const expectedVersions = request.fieldVersions && typeof request.fieldVersions === "object" ? request.fieldVersions : {};
       const draftConflicts = [];
