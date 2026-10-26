@@ -179,7 +179,21 @@ function initializeMeetingPeople() {
   attendeesButton.addEventListener("click", openAttendeesDialog);
   document.getElementById("closeAttendeesDialog").addEventListener("click", closeAttendeesDialog);
   dialog.addEventListener("cancel", event => { event.preventDefault(); void closeAttendeesDialog(); });
+  let backdropPress = false;
+  const isOutsideDialog = event => {
+    if (event.target !== dialog) return false;
+    const rect = dialog.getBoundingClientRect();
+    return event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom;
+  };
+  dialog.addEventListener("pointerdown", event => { backdropPress = event.button === 0 && isOutsideDialog(event); });
+  dialog.addEventListener("pointercancel", () => { backdropPress = false; });
+  dialog.addEventListener("click", event => {
+    const dismiss = backdropPress && isOutsideDialog(event);
+    backdropPress = false;
+    if (dismiss) void closeAttendeesDialog();
+  });
   dialog.addEventListener("close", () => {
+    backdropPress = false;
     attendeesMotion?.cancel(); attendeesMotion = null;
     attendeesClosing = false;
     dialog.classList.remove("attendees-closing");
