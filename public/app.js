@@ -95,6 +95,12 @@ function applySharedDraftsToRows(rolesRows, drafts) {
       Object.entries(updates || {}).forEach(([label, value]) => {
         const target = rows.get(label)?.row;
         if (target) target[col] = value;
+        else if (label === "Attendees") {
+          const row = [label];
+          row[col] = value;
+          rolesRows.push(row);
+          rows.set(label, { row });
+        }
       });
     });
   });
@@ -215,7 +221,7 @@ function parseCsv(text) {
 
 function clean(value) { return String(value ?? "").trim(); }
 function normalizeName(value) {
-  let name = clean(value).replace(/\s*\([^)]*\)\s*$/, "").trim();
+  let name = assignmentName(value).replace(/\s*\([^)]*\)\s*$/, "").trim();
   const aliases = { Shilry: "Shirly", EunJeong: "Eunjeong", "Q-Sun": "Q Sun", Stella: "Stella Yang" };
   name = aliases[name] || name;
   const blocked = /^(no meeting|education|speech contest|area |division |district |february|[-~])|session$/i;
@@ -288,7 +294,7 @@ function buildModel(rolesRows, agendaRows) {
 
   const completedColumns = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).filter(c => {
     const anchors = ["Chairperson", "Toastmaster", "General Evaluator", "Speaker 1"];
-    return anchors.filter(label => clean(rowsByLabel.get(label)?.row[c.col])).length >= 3;
+    return anchors.filter(label => confirmedAssignment(rowsByLabel.get(label)?.row[c.col])).length >= 3;
   });
   const completedSet = new Set(completedColumns.map(c => c.col));
   const previousEditableMeeting = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).at(-1) || null;
@@ -314,6 +320,7 @@ function buildModel(rolesRows, agendaRows) {
       searchAssignments.push({ member, role, sourceLabel, label: role, value: member, kind: "role", groupKey: `member:${member}`, groupLabel: member, date: column.date, meetingNo: column.meetingNo, col: column.col });
     });
     completedColumns.forEach(column => {
+      if (isTentative(row[column.col])) return;
       const member = normalizeName(row[column.col]);
       if (!member) return;
       assignments.push({ member, role, sourceLabel, date: column.date, meetingNo: column.meetingNo, col: column.col });
@@ -348,6 +355,7 @@ function buildModel(rolesRows, agendaRows) {
       });
     });
     completedColumns.forEach(column => {
+      if (isTentative(speakerRow[column.col])) return;
       const speaker = normalizeName(speakerRow[column.col]);
       if (!speaker) return;
       speeches.push({
@@ -392,18 +400,18 @@ function extractAgenda(rows) {
 }
 
 function detailedAgenda(model, meeting) {
-  const memberFor = label => normalizeName(model.rowsByLabel.get(label)?.row[meeting.col]) || "Pending";
+  const memberFor = label => displayAssignment(model.rowsByLabel.get(label)?.row[meeting.col]);
   const combinedMembers = labels => [...new Set(labels.map(memberFor))].join(" / ");
   const speeches = [];
   for (let number = 1; number <= 4; number += 1) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
     if (number > 1 && !speaker) continue;
     speeches.push([
-      speaker || "Pending",
+      displayAssignment(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]),
       clean(model.rowsByLabel.get(`Project ${number}`)?.row[meeting.col]) || "Pending",
       clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col]) || "Pending",
       clean(model.rowsByLabel.get(`Time ${number}`)?.row[meeting.col]) || "Pending",
-      normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]) || "Pending",
+      displayAssignment(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]),
     ]);
   }
   return [
@@ -568,7 +576,7 @@ function showRoleDetails(assignment) {
   setText("agendaDialogEyebrow", "ROLE RESPONSIBILITIES");
   setText("agendaDialogTitle", assignment.role);
   document.getElementById("agendaDialogDetails").innerHTML = `
-    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${escapeHtml(assignment.member)}</strong></p><span data-inline-edit-slot></span></div>
+    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}</strong></p><span data-inline-edit-slot></span></div>
     <ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
   configureDetailsEditor("roles", assignment.role);
   document.getElementById("agendaDetailsDialog").showModal();
@@ -656,8 +664,10 @@ function editableValue(meeting, label) {
 
 function editFieldHtml(meeting, label) {
   const value = editableValue(meeting, label);
+  const assignment = isAssignmentField(label);
+  const inputValue = assignment ? assignmentName(value) : value;
   const id = `edit-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  return `<label class="meeting-edit-field" for="${id}"><span>${escapeHtml(label)}</span><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(value)}" maxlength="500" autocomplete="off"><button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></label>`;
+  return `<div class="meeting-edit-field"><label for="${id}">${escapeHtml(label)}</label><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(inputValue)}" maxlength="${assignment ? 498 : 500}" autocomplete="off">${assignment ? `<button type="button" class="tentative-toggle" data-tentative-field="${escapeHtml(label)}" aria-pressed="${isTentative(value)}" title="예정 배정" aria-label="${escapeHtml(label)} 예정 배정">◷</button>` : ""}<button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></div>`;
 }
 
 let dashboardLoadVersion = 0;
@@ -711,7 +721,7 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
 
 function updateMeetingEditorState() {
   const inputs = [...document.querySelectorAll("#meetingEditFields [data-edit-field]:not(:disabled)")];
-  const changed = inputs.some(input => input.value.trim() !== input.dataset.initialValue);
+  const changed = inputs.some(input => (isAssignmentField(input.dataset.editField) ? assignmentInputValue(input) : input.value.trim()) !== input.dataset.initialValue);
   document.getElementById("saveMeetingEdit").disabled = !WRITE_ENDPOINT || !changed;
 }
 
@@ -725,8 +735,9 @@ async function saveMeetingEditor(event) {
     return;
   }
   const updates = Object.fromEntries([...document.querySelectorAll("#meetingEditFields [data-edit-field]")]
-    .filter(input => input.value.trim() !== input.dataset.initialValue)
-    .map(input => [input.dataset.editField, input.value.trim()]));
+    .map(input => [input.dataset.editField, isAssignmentField(input.dataset.editField) ? assignmentInputValue(input) : input.value.trim(), input.dataset.initialValue])
+    .filter(([, value, initial]) => value !== initial)
+    .map(([label, value]) => [label, value]));
   const meetingDate = sheetDateValue(state.editMeeting.date);
   if (!Object.keys(updates).length) return;
   const apiSection = activeEditApiSection();
@@ -896,15 +907,15 @@ function renderMeetingReadiness(model, meeting) {
     requirements.push({ label, complete: Boolean(clean(model.rowsByLabel.get(label)?.row[meeting.col])) });
   });
   ROLE_LABELS.filter(role => role !== "Speaker" && role !== "Evaluator").forEach(label => {
-    requirements.push({ label, complete: Boolean(normalizeName(model.rowsByLabel.get(label)?.row[meeting.col])) });
+    requirements.push({ label, complete: confirmedAssignment(model.rowsByLabel.get(label)?.row[meeting.col]) });
   });
   for (let number = 1; number <= 3; number += 1) {
     const speaker = normalizeName(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]);
     if (number > 1 && !speaker) continue;
     requirements.push(
-      { label: `Speaker ${number}`, complete: Boolean(speaker) },
+      { label: `Speaker ${number}`, complete: confirmedAssignment(model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col]) },
       { label: `Title ${number}`, complete: Boolean(clean(model.rowsByLabel.get(`Title ${number}`)?.row[meeting.col])) },
-      { label: `Evaluator ${number}`, complete: Boolean(normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col])) },
+      { label: `Evaluator ${number}`, complete: confirmedAssignment(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]) },
     );
   }
   const completed = requirements.filter(item => item.complete).length;
@@ -1117,6 +1128,8 @@ function renderSpeeches(model) {
 function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
+  document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
+  renderAttendees();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
     button.disabled = !canEditActiveMeeting();
     button.title = state.model && meeting && meeting.date < meetingReferenceDateKst() && !canEditActiveMeeting() ? "Only the immediately previous meeting can be edited." : "";
@@ -1201,10 +1214,10 @@ function renderThisWeek(model) {
     const role = canonicalRole(label);
     if (role === "Speaker" || role === "Evaluator") return;
     const member = normalizeName(row[meeting.col]);
-    assignments.push({ role, member: member || "Pending", pending: !member });
+    assignments.push({ role, sourceLabel: label, rawValue: row[meeting.col], member: member || "Pending", pending: !member });
   });
   const assignmentContainer = document.getElementById("weekAssignments");
-  assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<button type="button" class="assignment ${item.pending ? "pending" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></button>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
+  assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<div class="assignment-wrap"><button type="button" class="assignment ${item.pending ? "pending" : ""} ${isTentative(item.rawValue) ? "tentative" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}</strong></button>${tentativeIcon(item.sourceLabel, item.rawValue)}</div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
     const assignment = assignments[Number(button.dataset.assignmentIndex)];
     button.addEventListener("click", () => showRoleDetails(assignment));
@@ -1220,6 +1233,8 @@ function renderThisWeek(model) {
     const evaluator = normalizeName(model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col]);
     weekSpeeches.push({
       slot: number,
+      speakerRaw: model.rowsByLabel.get(`Speaker ${number}`)?.row[meeting.col],
+      evaluatorRaw: model.rowsByLabel.get(`Evaluator ${number}`)?.row[meeting.col],
       speaker: speaker || `Speaker ${number} · Pending`,
       title: title || "Title Pending",
       project: clean(model.rowsByLabel.get(`Project ${number}`)?.row[meeting.col]),
@@ -1229,14 +1244,15 @@ function renderThisWeek(model) {
     });
   }
   const weekContainer = document.getElementById("weekSpeeches");
-  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open speech details for ${escapeHtml(s.speaker)}"><span class="speaker">${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(`Evaluator · ${s.evaluator}`)}</p></article>`).join("");
+  weekContainer.innerHTML = weekSpeeches.map(s => `<article class="week-speech ${s.pending ? "pending" : ""}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open speech details for ${escapeHtml(s.speaker)}"><span class="speaker">${tentativeIcon(`Speaker ${s.slot}`, s.speakerRaw)}${escapeHtml(s.speaker)}</span><h4>${escapeHtml(s.title)}</h4><p>Evaluator · ${tentativeIcon(`Evaluator ${s.slot}`, s.evaluatorRaw)}${escapeHtml(s.evaluator)}</p></article>`).join("");
   weekContainer.querySelectorAll(".week-speech").forEach((card, index) => {
     const speech = weekSpeeches[index];
     addTooltip(card, `${speech.speaker} · ${speech.title}\nProject: ${speech.project || "—"}\nTime: ${speech.time || "—"}\nEvaluator: ${speech.evaluator || "—"}`);
     const openDetails = () => showSpeechDetails(speech);
-    card.addEventListener("click", openDetails);
+    card.addEventListener("click", event => { if (!event.target.closest("[data-assignment-status]")) openDetails(); });
     addMobileLongPress(card, () => openMeetingEditor("speeches", "", speech.slot));
     card.addEventListener("keydown", event => {
+      if (event.target !== card) return;
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         openDetails();
@@ -1265,11 +1281,11 @@ function showSpeechDetails(speech) {
   hideTooltip();
   setText("speechDialogTitle", speech.title || "Title Pending");
   const details = [
-    ["Speaker", speech.speaker],
+    ["Speaker", `${isTentative(speech.speakerRaw) ? "◷ " : ""}${speech.speaker}`],
     ["Project", speech.project || "Pending"],
     ["Title", speech.title || "Pending"],
     ["Time", speech.time || "Pending"],
-    ["Evaluator", speech.evaluator || "Pending"],
+    ["Evaluator", `${isTentative(speech.evaluatorRaw) ? "◷ " : ""}${speech.evaluator || "Pending"}`],
   ];
   const editable = canEditActiveMeeting();
   document.getElementById("speechDialogDetails").innerHTML = details.map(([label, value]) => {
@@ -1618,6 +1634,12 @@ document.getElementById("discardLocalSaves").addEventListener("click", discardLo
 document.getElementById("meetingEditForm").addEventListener("submit", saveMeetingEditor);
 document.getElementById("meetingEditFields").addEventListener("input", updateMeetingEditorState);
 document.getElementById("meetingEditFields").addEventListener("click", event => {
+  const toggle = event.target.closest("[data-tentative-field]");
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", toggle.getAttribute("aria-pressed") !== "true");
+    updateMeetingEditorState();
+    return;
+  }
   const clearButton = event.target.closest("[data-clear-field]");
   if (!clearButton) return;
   const input = document.querySelector(`#meetingEditFields [data-edit-field="${CSS.escape(clearButton.dataset.clearField)}"]`);
@@ -1823,5 +1845,7 @@ document.addEventListener("click", event => {
   }
 }, true);
 const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
+initializeMeetingPeople();
+initializeRoleSuggestions();
 setActiveTab(initialTab, false);
 loadDashboard(false);

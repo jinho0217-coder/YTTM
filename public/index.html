@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261025-2" />
+    <link rel="stylesheet" href="./styles.css?v=20261026-2" />
   </head>
   <body>
     <div class="page-shell">
       <header class="topbar">
-        <a class="brand" id="guestGuideButton" href="#guest-guide" aria-label="Open the YTTM guide for first guests" aria-haspopup="dialog">
+        <div class="brand-group"><a class="brand" id="guestGuideButton" href="#guest-guide" aria-label="Open the YTTM guide for first guests" aria-haspopup="dialog">
           <img class="brand-logo" src="./toastmasters-logo.jpg" alt="Toastmasters International 로고" />
           <span><strong>YEONGTONG</strong><small>TOASTMASTERS</small></span>
-        </a>
+        </a><button id="attendeesButton" class="attendees-button" type="button" title="참석자 명단" aria-label="참석자 명단 열기" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 13a5 5 0 0 1 3 5v3"/></svg><span id="attendeesCount">0</span></button></div>
         <div class="topbar-actions">
           <span id="draftSyncBadge" class="draft-sync-badge synced">Google Sheet synced</span>
           <button id="applySheetsButton" class="apply-sheets-button" type="button">Apply to Google Sheets</button>
@@ -133,7 +133,7 @@
           </article>
           <div class="week-stack">
             <article class="panel assignments-panel">
-              <div class="panel-title"><h3>Role assignments</h3><span>Click a role for details</span></div>
+              <div class="panel-title"><h3>Role assignments</h3><div class="panel-title-actions"><span>Click a role for details</span><button id="roleSuggestionsButton" type="button" class="people-icon" title="Suggest roles from last meeting" aria-label="Suggest roles" aria-haspopup="dialog">✦</button></div></div>
               <div id="weekAssignments" class="assignment-grid"></div>
             </article>
             <article class="panel week-speeches-panel">
@@ -317,9 +317,32 @@
         <div id="rolePdfPages" class="role-pdf-pages" aria-live="polite"></div>
       </div>
     </dialog>
+    <dialog id="attendeesDialog" class="people-dialog" aria-labelledby="attendeesTitle">
+      <div class="missing-dialog-heading"><h2 id="attendeesTitle">참석자</h2><button id="closeAttendeesDialog" class="dialog-close" type="button" aria-label="참석자 명단 닫기">&times;</button></div>
+      <form id="attendeeForm" class="attendee-form">
+        <label class="sr-only" for="attendeeName">참석자 이름</label><input id="attendeeName" placeholder="이름" maxlength="80" autocomplete="off" required>
+        <button id="newAttendeeGuest" class="people-icon guest-toggle" type="button" aria-label="게스트로 추가" aria-pressed="false" title="게스트">♧</button>
+        <button class="people-icon attendee-add" type="submit" aria-label="참석자 추가" title="추가">＋</button>
+      </form>
+      <p id="attendeesStatus" class="people-status" role="status"></p>
+      <ul id="attendeesList" class="attendees-list"></ul>
+    </dialog>
+    <dialog id="assignmentStatusDialog" class="people-dialog assignment-status-dialog" aria-labelledby="assignmentStatusTitle">
+      <div class="missing-dialog-heading"><h2 id="assignmentStatusTitle"></h2><button id="closeAssignmentStatusDialog" class="dialog-close" type="button" aria-label="예정 배정 닫기">&times;</button></div>
+      <div class="status-options"><button type="button" data-status-action="confirm">✓ Confirm assignment</button><button type="button" data-status-action="delete">× Remove assignment</button></div>
+      <p id="assignmentStatusMessage" class="people-status" role="status"></p>
+    </dialog>
+    <dialog id="roleSuggestionsDialog" class="people-dialog" aria-labelledby="roleSuggestionsTitle">
+      <div class="missing-dialog-heading"><h2 id="roleSuggestionsTitle">Suggested roles</h2><button id="closeRoleSuggestionsDialog" type="button" class="dialog-close" aria-label="Close suggestions">&times;</button></div>
+      <div id="roleSuggestionsList" class="suggestions-list"></div>
+      <p id="roleSuggestionsStatus" class="people-status" role="status"></p>
+      <div class="meeting-edit-actions"><button id="applyRoleSuggestions" type="button" class="primary-button">Add tentative assignments</button></div>
+    </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
     <script src="./config.js?v=20260816-3"></script>
     <script src="./draft-sync.js?v=20261025-2" defer></script>
-    <script src="./app.js?v=20261025-2" defer></script>
+    <script src="./meeting-people.js?v=20261026-2" defer></script>
+    <script src="./role-suggestions.js?v=20261026-2" defer></script>
+    <script src="./app.js?v=20261026-2" defer></script>
   </body>
 </html>

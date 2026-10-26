@@ -4,8 +4,8 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const publicDir = path.join(__dirname, "../public");
-const payload = JSON.parse(fs.readFileSync(path.join(publicDir, "data/sheets.json"), "utf8"));
-const port = 4186;
+const payload = JSON.parse(fs.readFileSync(process.env.YTTM_VERIFY_LIVE === '1' ? path.join(__dirname, '../live-sheets.json') : path.join(publicDir, "data/sheets.json"), "utf8"));
+const port = Number(process.env.YTTM_VERIFY_PORT || 4186);
 const drafts = { revision: 0, meetings: {}, fieldVersions: {} };
 const results = new Map();
 function send(res, value, callback) {

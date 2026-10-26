@@ -1,5 +1,14 @@
 # YTTM Google Sheets write service
 
+## 예정 배정 및 참석자 명단 (2026-10-26)
+
+- 웹사이트 배포 시 `public/meeting-people.js`도 `app.js`, `index.html`, `styles.css`와 함께 포함합니다.
+- 예정 배정은 역할 셀의 이름 앞에 `◷ `를 저장합니다. 확정하면 접두사가 제거됩니다. 사이트는 이름 검색 시 이를 제외하고, 준비율과 완료 역할 집계에서 예정 배정을 제외합니다.
+- 참석자와 게스트 표시는 모임 날짜별 `Attendees` 행의 JSON으로 저장합니다. 역할 담당자는 자동으로 명단에 합쳐 표시됩니다. 수동 추가 명단은 기존 공용 초안·충돌 검증·관리자 승인 흐름을 따릅니다.
+- **참석자 저장 기능을 사용하려면 Apps Script의 `Code.gs`도 새 버전으로 배포해야 합니다.** 관리자 승인으로 참석자 명단을 처음 반영할 때만 `26_Roles` 맨 아래에 `Attendees` 행을 자동 추가합니다. 기존 `/exec` URL은 유지합니다.
+- 로컬 브라우저 검증: `node scripts/verify-instant-save.js`, [미리보기](http://127.0.0.1:4186). 이 환경의 저장은 메모리에서만 처리하며 Google Sheets를 변경하지 않습니다.
+- `Role assignments`의 ✦ 버튼은 직전 모임 참석 기록에서 후보를 고릅니다. 역할별 최초 수행을 우선하고 한 사람당 한 역할씩 추천하며, 이미 입력된 배정과 게스트는 제외합니다. 추천은 이력 기반 매칭으로 계산하며 선택한 후보만 예정 배정으로 저장합니다. 연사·평가자는 준비 여부를 추정해 자동 배정하지 않습니다.
+
 The public dashboard uses this service for shared drafts and live sheet reads. It remains read-only until the service is deployed.
 
 1. Open the target Google Sheet and choose **Extensions → Apps Script**.

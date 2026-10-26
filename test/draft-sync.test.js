@@ -33,6 +33,7 @@ function client(storage = new Map()) {
       querySelectorAll: () => [{ value: context.input, dataset: { editField: "Theme", initialValue: context.initial || "Original" } }],
     },
     canEditActiveMeeting: () => true,
+    isAssignmentField: () => false,
     activeEditApiSection: () => "theme",
     sheetDateValue: () => "2099-01-01",
     closeMeetingEditor: () => { element("meetingEditDialog").open = false; },

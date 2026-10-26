@@ -10,6 +10,7 @@ const DEFAULT_ADMIN_PIN = "1004";
 const MASTER_RESET_PIN = "1144";
 
 const EDITABLE_FIELDS = {
+  attendees: ["Attendees"],
   theme: ["Theme", "Theme Question", "Word of the day", "Quote of the day"],
   special: ["Special Event"],
   roles: [
@@ -163,7 +164,16 @@ function validatedUpdates(section, updates) {
   entries.forEach(([label, rawValue]) => {
     if (!allowedFields.has(label)) throw new Error(`Field is not allowed: ${label}`);
     const value = String(rawValue ?? "").trim();
-    if (value.length > 500) throw new Error(`Value is too long: ${label}`);
+    if (value.length > (section === "attendees" ? 6000 : 500)) throw new Error(`Value is too long: ${label}`);
+    if (section === "attendees" && value) {
+      const people = JSON.parse(value);
+      if (!Array.isArray(people) || people.length > 80 || people.some(person =>
+        !person || typeof person.name !== "string" || !person.name.trim() || person.name.length > 80 || typeof person.guest !== "boolean" || Object.keys(person).some(key => !["name", "guest"].includes(key)))) {
+        throw new Error("Invalid attendee list.");
+      }
+      const names = people.map(person => person.name.trim().toLocaleLowerCase());
+      if (new Set(names).size !== names.length) throw new Error("Duplicate attendee names.");
+    }
     cleanUpdates[label] = value;
   });
   return cleanUpdates;
@@ -260,8 +270,8 @@ function doPost(event) {
       const sheetConflicts = [];
       Object.keys(updates).forEach(label => {
         const row = context.rowByLabel.get(label);
-        if (!row) throw new Error(`Row was not found: ${label}`);
-        const sheetValue = String(context.values[row - 1][target.column - 1] ?? "").trim();
+        if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
+        const sheetValue = String(context.values[row - 1]?.[target.column - 1] ?? "").trim();
         sheetValues[label] = sheetValue;
         if (Object.prototype.hasOwnProperty.call(expectedValues, label) && String(expectedValues[label] ?? "").trim() !== sheetValue) {
           sheetConflicts.push(label);
@@ -285,7 +295,7 @@ function doPost(event) {
       const sectionDraft = { ...(drafts.meetings[target.date][request.section] || {}) };
       Object.entries(updates).forEach(([label, value]) => {
         const row = context.rowByLabel.get(label);
-        if (!row) throw new Error(`Row was not found: ${label}`);
+        if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
         const sheetValue = sheetValues[label];
         if (value === sheetValue) delete sectionDraft[label];
         else {
@@ -332,8 +342,8 @@ function doPost(event) {
             allEntries.push({ meetingDate, section, label, value: updates[label] });
             if (!selectedKeys.has(key)) return;
             const row = context.rowByLabel.get(label);
-            if (!row) throw new Error(`Row was not found: ${label}`);
-            const currentValue = String(context.sheet.getRange(row, target.column).getValue() ?? "").trim();
+            if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
+            const currentValue = row ? String(context.sheet.getRange(row, target.column).getValue() ?? "").trim() : "";
             const baseValue = String(drafts.bases?.[meetingDate]?.[section]?.[label] ?? currentValue).trim();
             if (currentValue !== baseValue) conflicts.push({ meetingDate, section, label, sheetValue: currentValue, draftValue: updates[label] });
             writes.push({ meetingDate, section, label, row, column: target.column, previousValue: currentValue, value: updates[label] });
@@ -349,6 +359,16 @@ function doPost(event) {
       let completed = 0;
       try {
         writes.forEach(item => {
+          if (!item.row && item.label === "Attendees") {
+            let row = context.rowByLabel.get("Attendees");
+            if (!row) {
+              row = context.sheet.getLastRow() + 1;
+              if (row > context.sheet.getMaxRows()) context.sheet.insertRowsAfter(context.sheet.getMaxRows(), 1);
+              context.sheet.getRange(row, 1).setValue("Attendees");
+              context.rowByLabel.set("Attendees", row);
+            }
+            item.row = row;
+          }
           context.sheet.getRange(item.row, item.column).setValue(item.value);
           completed += 1;
         });
