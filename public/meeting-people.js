@@ -121,84 +121,12 @@ function setNewAttendeeGuest(guest) {
   button.title = guest ? "Change to Member" : "Change to Guest";
   button.setAttribute("aria-label", `${button.textContent}. ${button.title}`);
 }
-let attendeesMotion = null;
-let attendeesClosing = false;
-function attendeesButtonFrame(dialog) {
-  const source = document.getElementById("attendeesButton").getBoundingClientRect();
-  const target = dialog.getBoundingClientRect();
-  return {
-    transform: `translate(${source.left - target.left}px, ${source.top - target.top}px) scale(${source.width / target.width}, ${source.height / target.height})`,
-    opacity: 0,
-  };
-}
-function openAttendeesDialog() {
-  const dialog = document.getElementById("attendeesDialog");
-  if (dialog.open) return;
-  hideTooltip();
-  dialog.showModal();
-  renderAttendees();
-  document.getElementById("attendeesButton").setAttribute("aria-expanded", "true");
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !dialog.animate) return;
-  const motion = dialog.animate([attendeesButtonFrame(dialog), { transform: "none", opacity: 1 }], {
-    duration: 320, easing: "cubic-bezier(.18,.8,.25,1)",
-  });
-  attendeesMotion = motion;
-  motion.finished.then(() => { if (attendeesMotion === motion) attendeesMotion = null; }).catch(() => {});
-}
-async function closeAttendeesDialog() {
-  const dialog = document.getElementById("attendeesDialog");
-  if (!dialog.open || attendeesClosing) return;
-  attendeesClosing = true;
-  const style = getComputedStyle(dialog);
-  const from = { transform: style.transform, opacity: style.opacity };
-  attendeesMotion?.cancel();
-  attendeesMotion = null;
-  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && dialog.animate) {
-    dialog.classList.add("attendees-closing");
-    const motion = dialog.animate([from, attendeesButtonFrame(dialog)], {
-      duration: 240, easing: "cubic-bezier(.4,0,.65,1)", fill: "forwards",
-    });
-    attendeesMotion = motion;
-    try { await motion.finished; } catch (_) {}
-    motion.cancel();
-    if (attendeesMotion === motion) attendeesMotion = null;
-  }
-  dialog.close();
-  dialog.classList.remove("attendees-closing");
-  attendeesClosing = false;
-  const button = document.getElementById("attendeesButton");
-  button.setAttribute("aria-expanded", "false");
-  button.focus({ preventScroll: true });
-}
 function initializeMeetingPeople() {
   setNewAttendeeGuest(false);
   const dialog = document.getElementById("attendeesDialog");
   const attendeesButton = document.getElementById("attendeesButton");
-  attendeesButton.setAttribute("aria-controls", dialog.id);
-  attendeesButton.setAttribute("aria-expanded", "false");
-  attendeesButton.addEventListener("click", openAttendeesDialog);
-  document.getElementById("closeAttendeesDialog").addEventListener("click", closeAttendeesDialog);
-  dialog.addEventListener("cancel", event => { event.preventDefault(); void closeAttendeesDialog(); });
-  let backdropPress = false;
-  const isOutsideDialog = event => {
-    if (event.target !== dialog) return false;
-    const rect = dialog.getBoundingClientRect();
-    return event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom;
-  };
-  dialog.addEventListener("pointerdown", event => { backdropPress = event.button === 0 && isOutsideDialog(event); });
-  dialog.addEventListener("pointercancel", () => { backdropPress = false; });
-  dialog.addEventListener("click", event => {
-    const dismiss = backdropPress && isOutsideDialog(event);
-    backdropPress = false;
-    if (dismiss) void closeAttendeesDialog();
-  });
-  dialog.addEventListener("close", () => {
-    backdropPress = false;
-    attendeesMotion?.cancel(); attendeesMotion = null;
-    attendeesClosing = false;
-    dialog.classList.remove("attendees-closing");
-    attendeesButton.setAttribute("aria-expanded", "false");
-  });
+  const popup = createAnchoredDialog(dialog, attendeesButton, { onOpen: renderAttendees });
+  document.getElementById("closeAttendeesDialog").addEventListener("click", () => { void popup.close(); });
   document.getElementById("newAttendeeGuest").addEventListener("click", event => {
     const button = event.currentTarget;
     setNewAttendeeGuest(button.getAttribute("aria-pressed") !== "true");

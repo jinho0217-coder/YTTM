@@ -1426,14 +1426,8 @@ document.getElementById("searchResultsDialog").addEventListener("click", event =
 document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
 
 const guestGuideDialog = document.getElementById("guestGuideDialog");
-document.getElementById("guestGuideButton").addEventListener("click", event => {
-  event.preventDefault();
-  if (!guestGuideDialog.open) guestGuideDialog.showModal();
-});
-document.getElementById("closeGuestGuideDialog").addEventListener("click", () => guestGuideDialog.close());
-guestGuideDialog.addEventListener("click", event => {
-  if (event.target === guestGuideDialog) guestGuideDialog.close();
-});
+const guestGuidePopup = createAnchoredDialog(guestGuideDialog, document.getElementById("guestGuideButton"));
+document.getElementById("closeGuestGuideDialog").addEventListener("click", () => { void guestGuidePopup.close(); });
 
 const roleGuidesDialog = document.getElementById("roleGuidesDialog");
 const rolePdfDialog = document.getElementById("rolePdfDialog");
