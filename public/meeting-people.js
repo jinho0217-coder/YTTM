@@ -1,6 +1,5 @@
 // Keep the status with the name so shared drafts and Sheets round-trip together.
 const TENTATIVE_PREFIX = "◷ ";
-const GUEST_ICON = '<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M18 5v6M15 8h6"/></svg>';
 function isTentative(value) { return /^◷\s/.test(clean(value)); }
 function assignmentName(value) { return clean(value).replace(/^◷\s+/, ""); }
 function isAssignmentField(label) { return ROLE_EDIT_FIELDS.includes(label) || /^(Speaker|Evaluator) [1-4]$/.test(label); }
@@ -93,7 +92,7 @@ function renderAttendees() {
   document.getElementById("attendeesList").innerHTML = people.length ? people.map(person => `
     <li class="attendee-row"><strong>${escapeHtml(person.name)}</strong>
       <div class="attendee-roles">${person.roles.map(role => `<span>${role.tentative ? "◷ " : ""}${escapeHtml(role.label)}</span>`).join("")}</div>
-      <button type="button" class="people-icon guest-toggle ${person.guest ? "is-guest" : ""}" data-guest-name="${escapeHtml(person.name)}" aria-label="${escapeHtml(person.name)} 게스트 표시" aria-pressed="${person.guest}" title="${person.guest ? "게스트 · 클릭하여 멤버로 변경" : "게스트로 표시"}" ${editable ? "" : "disabled"}>${GUEST_ICON}</button>
+      <button type="button" class="people-icon guest-toggle" data-guest-name="${escapeHtml(person.name)}" aria-label="${escapeHtml(person.name)}: ${person.guest ? "Guest. Change to Member" : "Member. Change to Guest"}" aria-pressed="${person.guest}" title="${person.guest ? "Change to Member" : "Change to Guest"}" ${editable ? "" : "disabled"}>${person.guest ? "Guest" : "Member"}</button>
       ${person.manual && !person.roles.length && editable ? `<button type="button" class="people-icon" data-remove-attendee="${escapeHtml(person.name)}" title="명단에서 삭제" aria-label="${escapeHtml(person.name)} 삭제">×</button>` : ""}
     </li>`).join("") : '<li class="empty-state">참석자 없음</li>';
 }
@@ -115,21 +114,28 @@ function updateAttendee(name, action) {
   if (people.length > 80) throw new Error("참석자는 최대 80명까지 추가할 수 있습니다.");
   savePeopleUpdates("attendees", { Attendees: people.length ? JSON.stringify(people) : "" }, state.attendeesVersions);
 }
+function setNewAttendeeGuest(guest) {
+  const button = document.getElementById("newAttendeeGuest");
+  button.setAttribute("aria-pressed", String(guest));
+  button.textContent = guest ? "Guest" : "Member";
+  button.title = guest ? "Change to Member" : "Change to Guest";
+  button.setAttribute("aria-label", `${button.textContent}. ${button.title}`);
+}
 function initializeMeetingPeople() {
-  document.getElementById("newAttendeeGuest").innerHTML = GUEST_ICON;
+  setNewAttendeeGuest(false);
   const dialog = document.getElementById("attendeesDialog");
   document.getElementById("attendeesButton").addEventListener("click", () => { dialog.showModal(); renderAttendees(); });
   document.getElementById("closeAttendeesDialog").addEventListener("click", () => dialog.close());
   document.getElementById("newAttendeeGuest").addEventListener("click", event => {
     const button = event.currentTarget;
-    button.setAttribute("aria-pressed", button.getAttribute("aria-pressed") !== "true");
+    setNewAttendeeGuest(button.getAttribute("aria-pressed") !== "true");
   });
   document.getElementById("attendeeForm").addEventListener("submit", event => {
     event.preventDefault();
     const input = document.getElementById("attendeeName");
     try {
       updateAttendee(clean(input.value), "add"); input.value = "";
-      document.getElementById("newAttendeeGuest").setAttribute("aria-pressed", "false");
+      setNewAttendeeGuest(false);
       document.getElementById("attendeesStatus").textContent = ""; input.focus();
     } catch (error) { document.getElementById("attendeesStatus").textContent = error.message; }
   });
