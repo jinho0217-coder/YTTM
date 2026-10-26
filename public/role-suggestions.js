@@ -6,7 +6,8 @@ function suggestMeetingRoles(model, meeting) {
   if (!previous) return { previous: null, items: [] };
   const occupied = new Set(meetingAttendees(model, meeting).filter(p => p.roles.length).map(p => p.name.toLocaleLowerCase()));
   const candidates = meetingAttendees(model, previous).filter(person => !person.guest && !occupied.has(person.name.toLocaleLowerCase()));
-  const fields = ROLE_EDIT_FIELDS.filter(label => model.rowsByLabel.has(label) && !clean(model.rowsByLabel.get(label).row[meeting.col]));
+  const evaluatorFields = [1, 2, 3, 4].filter(slot => normalizeName(model.rowsByLabel.get(`Speaker ${slot}`)?.row[meeting.col])).map(slot => `Evaluator ${slot}`);
+  const fields = [...ROLE_EDIT_FIELDS, ...evaluatorFields].filter(label => model.rowsByLabel.has(label) && !clean(model.rowsByLabel.get(label).row[meeting.col]));
   const history = [];
   model.rowsByLabel.forEach(({ row }, label) => {
     if (!isRoleRow(label)) return;
@@ -55,8 +56,19 @@ function initializeRoleSuggestions() {
       if (!items.length) return;
       const people = meetingAttendees(state.model, meeting);
       if (items.some(item => editableValue(meeting, item.label) || people.some(person => person.roles.length && person.name.toLocaleLowerCase() === item.name.toLocaleLowerCase()))) throw new Error('Assignments changed. Open suggestions again.');
-      savePeopleUpdates('roles', Object.fromEntries(items.map(item => [item.label, TENTATIVE_PREFIX + item.name])), suggestion.versions);
+      const groups = groupSuggestedAssignments(items);
+      Object.entries(groups).forEach(([section, updates]) => savePeopleUpdates(section, updates, suggestion.versions));
       document.getElementById('roleSuggestionsDialog').close();
     } catch (error) { document.getElementById('roleSuggestionsStatus').textContent = error.message; }
   });
+}
+
+function groupSuggestedAssignments(items) {
+  const groups = {};
+  items.forEach(item => {
+    const section = /^Evaluator [1-4]$/.test(item.label) ? 'speeches' : 'roles';
+    groups[section] ||= {};
+    groups[section][item.label] = TENTATIVE_PREFIX + item.name;
+  });
+  return groups;
 }

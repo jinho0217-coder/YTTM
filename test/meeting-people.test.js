@@ -163,3 +163,19 @@ test("suggestions exclude guests and do not invent candidates when there is no a
   const empty = c.buildModel([["Date", "2099-01-01"], ["Chairperson", ""]], []);
   assert.equal(c.suggestMeetingRoles(empty, empty.columns[0]).items.length, 0);
 });
+
+test("evaluator suggestions fill active speeches only, keeping assigned evaluators and speakers", () => {
+  const c = client();
+  const rows = [["Date", "2020-01-01", "2099-01-01"], ['Chairperson','Alice','Host'],['Timer','Bob','Timer'],['Speaker 1','Carol','Carol'],['Evaluator 1','Alice','Existing'],['Speaker 2','','Dan'],['Evaluator 2','',''],['Speaker 3','',''],['Evaluator 3','',''],['Speaker 4','','Eve'],['Evaluator 4','','']];
+  const model = c.buildModel(rows, []);
+  const items = c.suggestMeetingRoles(model, model.columns[1]).items;
+  assert.equal(items.length, 2);
+  assert.deepEqual(Array.from(items, item => item.label), ['Evaluator 2','Evaluator 4']);
+  assert.ok(items.every(item => ['Alice','Bob'].includes(item.name)));
+  const groups = c.groupSuggestedAssignments(items);
+  assert.equal(groups.roles, undefined);
+  assert.equal(Object.keys(groups.speeches).length, 2);
+  const mixed = c.groupSuggestedAssignments([{label:'Timer',name:'Bob'},{label:'Evaluator 2',name:'Alice'}]);
+  assert.equal(mixed.roles.Timer,'◷ Bob');
+  assert.equal(mixed.speeches['Evaluator 2'],'◷ Alice');
+});
