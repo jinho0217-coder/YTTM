@@ -88,7 +88,7 @@ function renderAttendees() {
   state.attendeesVersions = localFieldVersions();
   const editable = canEditActiveMeeting() && !meeting?.noMeeting && Boolean(WRITE_ENDPOINT);
   document.getElementById("attendeeForm").hidden = !editable;
-  document.getElementById("attendeesTitle").textContent = `${meeting ? formatMeetingDate(meeting.date) : ""} 참석자 · ${people.length}`;
+  document.getElementById("attendeesTitle").textContent = `${meeting ? formatMeetingDate(meeting.date) : ""} Attendees · ${people.length}`;
   document.getElementById("attendeesList").innerHTML = people.length ? people.map(person => `
     <li class="attendee-row"><strong>${escapeHtml(person.name)}</strong>
       <div class="attendee-roles">${person.roles.map(role => `<span>${role.tentative ? "◷ " : ""}${escapeHtml(role.label)}</span>`).join("")}</div>
