@@ -83,6 +83,7 @@ function renderDraftSyncState() {
   button.disabled = !pending;
   button.textContent = pending ? `Apply ${entries.length} change${entries.length === 1 ? "" : "s"}` : "Google Sheet up to date";
   renderLocalSaveState();
+  button.title = button.textContent;
 }
 
 function applySharedDraftsToRows(rolesRows, drafts) {

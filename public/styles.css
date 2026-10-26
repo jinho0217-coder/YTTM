@@ -790,12 +790,27 @@ footer p { text-align: right; }
   .topbar { gap: 12px; padding-inline: 12px; }
   .brand-group { flex: 0 0 auto; gap: 8px; }
   .brand-group .brand { flex: 0 0 auto; }
+  .brand-group .brand > span { display: block; }
   .brand-group .brand-logo { flex: 0 0 42px; width: 42px; height: 42px; }
   .attendees-button { flex: 0 0 auto; min-width: 56px; }
   .topbar-actions { flex: 1 1 0; min-width: 0; gap: 6px; }
   .draft-sync-badge { display: none; }
-  .topbar-actions .apply-sheets-button { flex: 1 1 0; min-width: 0; max-width: 180px; padding: 7px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions .apply-sheets-button { position: relative; flex: 0 0 40px; width: 40px; min-width: 40px; max-width: 40px; min-height: 40px; padding: 8px; overflow: visible; border-radius: 50%; font-size: 0; }
+  .topbar-actions .apply-sheets-button::before { content: "⇅"; display: block; font-size: 23px; line-height: 1; }
+  .topbar-actions .apply-sheets-button.pending::after { content: ""; position: absolute; top: -1px; right: -1px; width: 8px; height: 8px; border: 2px solid var(--ink); border-radius: 50%; background: var(--red-bright); }
   .admin-settings-button, .refresh-button { flex: 0 0 40px; width: 40px; min-width: 40px; min-height: 40px; padding: 8px; font-size: 0; }
   .admin-settings-button span { font-size: 17px; }
   .refresh-button span { font-size: 19px; }
+}
+
+@media (max-width: 374px) {
+  .topbar { gap: 8px; padding-inline: 8px; }
+  .brand-group { gap: 6px; }
+  .brand-group .brand { gap: 5px; }
+  .brand-group .brand-logo { flex-basis: 32px; width: 32px; height: 32px; }
+  .brand strong { font-size: 10px; }
+  .brand small { font-size: 7px; }
+  .attendees-button { min-width: 46px; padding-inline: 6px; gap: 3px; }
+  .topbar-actions { gap: 4px; }
+  .topbar-actions .apply-sheets-button, .admin-settings-button, .refresh-button { flex-basis: 34px; width: 34px; min-width: 34px; max-width: 34px; }
 }
