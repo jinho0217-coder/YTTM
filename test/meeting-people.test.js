@@ -52,12 +52,38 @@ test("attendees merge aliases and multiple roles, keep guests without roles, and
   const people = c.meetingAttendees(model, model.columns[0]);
   assert.equal(people.length, 3);
   const jin = people.find(p => p.name === "Jin");
-  assert.equal(jin.roles.length, 2);
-  assert.equal(jin.roles[0].tentative, true);
+  assert.equal(jin.roles.length, 1);
+  assert.equal(jin.roles[0].label, 'Speaker 1');
+  assert.equal(jin.roles[0].tentative, false);
   assert.equal(people.find(p => p.name === "Shirly").guest, true);
   assert.equal(people.find(p => p.name === "Guest").roles.length, 0);
   assert.equal(c.meetingAttendees(model, model.columns[1]).length, 1);
   assert.equal(c.meetingAttendees(model, { ...model.columns[0], noMeeting: true }).length, 0);
+});
+
+test("attendance excludes tentative roles but preserves explicit attendees and confirmed roles", () => {
+  const c = client();
+  const rows = [['Date','2099-01-01'],['Chairperson','◷ Alice'],['Timer','Bob'],['Speaker 1','◷ Bob'],['Evaluator 1','◷ Carol'],['Grammarian','◷ Dave'],['Attendees','[{"name":"Dave","guest":false},{"name":"Guest","guest":true}]']];
+  let model = c.buildModel(rows, []);
+  let people = c.meetingAttendees(model, model.columns[0]);
+  assert.deepEqual(Array.from(people, person => person.name), ['Bob','Dave','Guest']);
+  assert.deepEqual(Array.from(people.find(person => person.name === 'Bob').roles, role => role.label), ['Timer']);
+  assert.equal(people.find(person => person.name === 'Dave').roles.length, 0);
+  assert.equal(c.meetingAttendees(model, model.columns[0], {includeTentative:true}).length, 5);
+  rows[1][1] = 'Alice';
+  model = c.buildModel(rows, []);
+  people = c.meetingAttendees(model, model.columns[0]);
+  assert.equal(people.filter(person => person.name === 'Alice').length, 1, 'confirming adds the attendee exactly once');
+});
+
+test("hidden tentative assignees remain reserved when suggesting other roles", () => {
+  const c = client();
+  const rows = [['Date','2020-01-01','2099-01-01'],['Chairperson','Alice','◷ Alice'],['Timer','Bob',''],['Evaluator 1','Carol',''],['Speaker 1','','Speaker']];
+  const model = c.buildModel(rows, []);
+  const items = c.suggestMeetingRoles(model, model.columns[1]).items;
+  assert.equal(c.meetingAttendees(model, model.columns[1]).some(person => person.name === 'Alice'), false);
+  assert.ok(items.length > 0);
+  assert.ok(items.every(item => item.name !== 'Alice'));
 });
 test("a new attendees row survives shared snapshots and pending local overlays", () => {
   const c = client();

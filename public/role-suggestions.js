@@ -4,7 +4,7 @@ function suggestMeetingRoles(model, meeting) {
   const previous = model.columns.filter(column => !column.noMeeting && column.date < meeting.date && column.date < meetingReferenceDateKst())
     .sort((a, b) => b.date - a.date).find(column => meetingAttendees(model, column).length);
   if (!previous) return { previous: null, items: [] };
-  const occupied = new Set(meetingAttendees(model, meeting).filter(p => p.roles.length).map(p => p.name.toLocaleLowerCase()));
+  const occupied = new Set(meetingAttendees(model, meeting, { includeTentative: true }).filter(p => p.roles.length).map(p => p.name.toLocaleLowerCase()));
   const candidates = meetingAttendees(model, previous).filter(person => !person.guest && !occupied.has(person.name.toLocaleLowerCase()));
   const evaluatorFields = [1, 2, 3, 4].filter(slot => normalizeName(model.rowsByLabel.get(`Speaker ${slot}`)?.row[meeting.col])).map(slot => `Evaluator ${slot}`);
   const fields = [...ROLE_EDIT_FIELDS, ...evaluatorFields].filter(label => model.rowsByLabel.has(label) && !clean(model.rowsByLabel.get(label).row[meeting.col]));
@@ -54,7 +54,7 @@ function initializeRoleSuggestions() {
       if (!meeting || sheetDateValue(meeting.date) !== suggestion.meetingDate) throw new Error('The meeting changed. Open suggestions again.');
       const items = [...document.querySelectorAll('[data-suggestion-index]:checked')].map(input => suggestion.items[Number(input.dataset.suggestionIndex)]);
       if (!items.length) return;
-      const people = meetingAttendees(state.model, meeting);
+      const people = meetingAttendees(state.model, meeting, { includeTentative: true });
       if (items.some(item => editableValue(meeting, item.label) || people.some(person => person.roles.length && person.name.toLocaleLowerCase() === item.name.toLocaleLowerCase()))) throw new Error('Assignments changed. Open suggestions again.');
       const groups = groupSuggestedAssignments(items);
       Object.entries(groups).forEach(([section, updates]) => savePeopleUpdates(section, updates, suggestion.versions));

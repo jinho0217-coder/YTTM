@@ -51,7 +51,7 @@ function readAttendees(value) {
   if (!Array.isArray(people) || people.some(p => !p || typeof p.name !== "string" || !clean(p.name) || typeof p.guest !== "boolean")) throw new Error("참석자 명단을 읽을 수 없습니다.");
   return people;
 }
-function meetingAttendees(model, meeting) {
+function meetingAttendees(model, meeting, { includeTentative = false } = {}) {
   if (!meeting || meeting.noMeeting) return [];
   const people = new Map();
   readAttendees(model.rowsByLabel.get("Attendees")?.row[meeting.col]).forEach(person => {
@@ -60,6 +60,7 @@ function meetingAttendees(model, meeting) {
   });
   model.rowsByLabel.forEach(({ row }, label) => {
     if (!isRoleRow(label)) return;
+    if (!includeTentative && isTentative(row[meeting.col])) return;
     const name = normalizeName(row[meeting.col]);
     if (!name) return;
     const key = name.toLocaleLowerCase();
