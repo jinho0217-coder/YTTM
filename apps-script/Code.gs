@@ -320,6 +320,23 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    if (request.action === "recordLibraryReservation") {
+      const secret = PropertiesService.getScriptProperties().getProperty("LIBRARY_WORKER_TOKEN");
+      if (!secret || request.token !== secret) throw new Error("Access denied.");
+      const date = String(request.date || "");
+      const status = String(request.status || "");
+      const hours = String(request.hours || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !["success", "failed", "unknown"].includes(status) || !/^\d{2}:00-\d{2}:00$/.test(hours)) throw new Error("Invalid result.");
+      const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+      let sheet = spreadsheet.getSheetByName("Library_Reservations");
+      if (!sheet) { sheet = spreadsheet.insertSheet("Library_Reservations"); sheet.appendRow(["date", "status", "hours", "updated_at"]); }
+      const rows = sheet.getDataRange().getDisplayValues();
+      const matches = rows.slice(1).map((row, index) => row[0] === date ? index + 2 : 0).filter(Boolean);
+      if (matches.length > 1) throw new Error("Duplicate result rows require review.");
+      const row = matches[0] || sheet.getLastRow() + 1;
+      sheet.getRange(row, 1, 1, 4).setValues([[date, status, hours, new Date().toISOString()]]);
+      return operationResponse(request, { ok: true });
+    }
     // Reloads and retries reuse the same ID: acknowledge an already committed
     // draft without writing it twice or creating a false version conflict.
     if (request.action === "saveDraft" && /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {

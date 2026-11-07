@@ -1,0 +1,40 @@
+name: Library reservation
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Reservation date in YYYY-MM-DD (KST)
+        required: true
+        type: string
+      live:
+        description: Submit a real reservation
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: library-reservation
+  cancel-in-progress: false
+
+jobs:
+  reservation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - run: node --test test/library-*.test.js
+      - run: node scripts/library-worker.js
+        env:
+          LIBRARY_TARGET_DATE: ${{ inputs.date }}
+          LIBRARY_LIVE: ${{ inputs.live && '1' || '0' }}
+          LIBRARY_SUPABASE_SERVICE_KEY: ${{ secrets.LIBRARY_SUPABASE_SERVICE_KEY }}
+          LIBRARY_WORKER_TOKEN: ${{ secrets.LIBRARY_WORKER_TOKEN }}
+          LIBRARY_APPROVED_TERMS_HASH: ${{ vars.LIBRARY_APPROVED_TERMS_HASH }}
