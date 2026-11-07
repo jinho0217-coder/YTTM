@@ -320,6 +320,38 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    if (request.action === "startLibraryReservation") {
+      const properties = PropertiesService.getScriptProperties();
+      const accessKey = properties.getProperty("LIBRARY_DISPATCH_KEY");
+      const githubToken = properties.getProperty("LIBRARY_GITHUB_TOKEN");
+      if (!accessKey || accessKey.length < 32 || !githubToken) throw new Error("예약 실행 설정이 필요합니다.");
+      if (request.accessKey !== accessKey) throw new Error("예약 실행 키를 확인하세요.");
+      const date = String(request.date || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("예약 날짜를 확인하세요.");
+      const target = new Date(date + "T00:00:00Z");
+      const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
+      if (!Number.isFinite(target.getTime()) || target.toISOString().slice(0, 10) !== date || target.getUTCDay() !== 0 || date < today) {
+        throw new Error("오늘 이후의 일요일을 선택하세요.");
+      }
+      const cache = CacheService.getScriptCache();
+      const dispatchKey = "libraryDispatch:" + date;
+      if (cache.get(dispatchKey)) return operationResponse(request, { ok: true });
+      let response;
+      try {
+        response = UrlFetchApp.fetch("https://api.github.com/repos/jinho0217-coder/YTTM/actions/workflows/library-reservation.yml/dispatches", {
+          method: "post",
+          contentType: "application/json",
+          headers: { Authorization: "Bearer " + githubToken, Accept: "application/vnd.github+json" },
+          payload: JSON.stringify({ ref: "main", inputs: { date, live: "true" } }),
+          muteHttpExceptions: true,
+        });
+      } catch (_) {
+        throw new Error("예약 실행 요청을 확인할 수 없습니다. Actions 실행 내역을 확인하세요.");
+      }
+      if (![200, 204].includes(response.getResponseCode())) throw new Error("GitHub에서 예약 실행 요청을 거부했습니다.");
+      cache.put(dispatchKey, "1", 600);
+      return operationResponse(request, { ok: true });
+    }
     if (request.action === "recordLibraryReservation") {
       const secret = PropertiesService.getScriptProperties().getProperty("LIBRARY_WORKER_TOKEN");
       if (!secret || request.token !== secret) throw new Error("Access denied.");

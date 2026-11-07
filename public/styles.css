@@ -816,3 +816,22 @@ footer p { text-align: right; }
 
 .role-guest-icon { display: inline-block; width: 14px; height: 14px; margin-left: 6px; vertical-align: -1px; color: var(--blue); flex-shrink: 0; }
 .week-speech .role-guest-icon { color: #edc15e; }
+.manual-library-booking {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid #1b7288;
+  border-radius: 999px;
+  color: #1b7288;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.manual-library-booking:hover,
+.manual-library-booking:focus-visible {
+  background: #eaf4f6;
+}

@@ -654,6 +654,27 @@ function activeMeeting() {
   return state.model.regularMeetings[state.model.comingMeetingIndex + state.meetingOffset] || null;
 }
 
+async function requestLibraryBooking(event) {
+  const meeting = activeMeeting();
+  if (!meeting) return;
+  const date = sheetDateValue(meeting.date);
+  const button = event.currentTarget;
+  const accessKey = window.prompt(`${date} 커뮤니티룸 2, 13:00~14:00 예약을 실행하려면 예약 실행 키를 입력하세요.`);
+  if (!accessKey) return;
+  button.disabled = true;
+  button.textContent = "요청 중…";
+  try {
+    await apiRequest({ action: "startLibraryReservation", date, accessKey });
+    button.textContent = "실행 요청됨";
+    window.alert("예약 실행 요청을 보냈습니다. 최종 결과는 GitHub Actions와 예약 내역에서 확인할 수 있습니다.");
+  } catch (error) {
+    button.textContent = "도서관 예약";
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function canEditActiveMeeting() {
   const meeting = activeMeeting();
   return Boolean(meeting) && (meeting.date >= meetingReferenceDateKst() || meeting.col === state.model.previousEditableMeeting?.col);
@@ -1852,5 +1873,6 @@ document.addEventListener("click", event => {
 const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 initializeMeetingPeople();
 initializeRoleSuggestions();
+document.getElementById("requestLibraryBooking").addEventListener("click", requestLibraryBooking);
 setActiveTab(initialTab, false);
 loadDashboard(false);

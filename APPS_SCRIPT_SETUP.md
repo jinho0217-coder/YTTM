@@ -39,6 +39,8 @@ The dashboard calls the same `/exec` URL with `action=getSheets` to read the liv
 The service accepts the immediately previous regular meeting plus every meeting date from the current Korean-time cutoff onward. It only updates allowlisted rows in `26_Roles`; older past meetings, dates, meeting numbers, other sheets, structure, and formulas are not writable through this endpoint. The allowlist includes the `Special Event` row.
 # 도서관 예약 실행기
 
+YTTM의 **도서관 예약** 버튼은 화면에 표시된 모임 날짜의 13:00~14:00 실예약 워크플로를 시작합니다. 예약 실행자에게만 알려줄 32자 이상의 임의 값을 Script Properties의 `LIBRARY_DISPATCH_KEY`에 설정합니다. 같은 곳의 `LIBRARY_GITHUB_TOKEN`에는 YTTM 저장소의 Actions 쓰기 권한이 있는 GitHub 토큰을 설정합니다. 새 권한을 승인한 뒤 기존 Apps Script 웹 앱 배포를 갱신합니다. 실행 요청이 접수되면 실제 예약 결과는 GitHub Actions와 도서관 예약 내역에서 확인할 수 있습니다.
+
 - Apps Script의 Script Properties에 `LIBRARY_WORKER_TOKEN`을 설정하고 기존 웹 앱을 새 버전으로 배포합니다.
 - GitHub Actions Secrets에 같은 `LIBRARY_WORKER_TOKEN`과 Supabase 서버 키 `LIBRARY_SUPABASE_SERVICE_KEY`를 설정합니다.
 - Actions의 **Library reservation**에서 날짜를 입력하고 `live`를 끈 채 실행합니다. 신청서까지 확인한 실행 로그에 시설 이용 규정과 확인값이 표시됩니다.
