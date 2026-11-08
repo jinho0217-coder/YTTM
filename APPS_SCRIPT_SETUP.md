@@ -39,9 +39,9 @@ The dashboard calls the same `/exec` URL with `action=getSheets` to read the liv
 The service accepts the immediately previous regular meeting plus every meeting date from the current Korean-time cutoff onward. It only updates allowlisted rows in `26_Roles`; older past meetings, dates, meeting numbers, other sheets, structure, and formulas are not writable through this endpoint. The allowlist includes the `Special Event` row.
 # 도서관 예약 실행기
 
-YTTM의 Admin 팝업에서 달력 아이콘을 열고 구글 시트 변경 승인에 사용하는 4자리 관리자 PIN을 입력합니다. 이 변경을 적용하려면 Apps Script 웹 앱 배포를 갱신합니다. 자동 예약을 켜면 매주 월요일 10:17 한국 시간에 시작되는 워크플로가 다음 일요일 13:00~14:00을 조회합니다. 스위치의 기본값은 꺼짐입니다.
+YTTM의 Admin 팝업에서 달력 아이콘을 열고 4자리 관리자 PIN을 입력합니다. Supabase Edge Function Secrets의 `LIBRARY_ADMIN_PIN`에 구글 시트 변경 승인 PIN과 같은 값을 설정합니다. 두 PIN은 별도로 저장되므로 같은 값으로 유지하려면 변경할 때 두 곳을 갱신합니다. 자동 예약을 켜면 매주 월요일 10:17 한국 시간에 시작되는 워크플로가 다음 일요일 13:00~14:00을 조회합니다. 새 예약 설정의 기본값은 꺼짐입니다.
 
-- Apps Script의 Script Properties에 `LIBRARY_WORKER_TOKEN`을 설정하고 기존 웹 앱을 새 버전으로 배포합니다.
-- GitHub Actions Secrets에 같은 `LIBRARY_WORKER_TOKEN`과 Supabase 서버 키 `LIBRARY_SUPABASE_SERVICE_KEY`를 설정합니다.
+- Supabase에 `supabase/library-booking.sql`을 적용하고 `library-accounts` Edge Function을 배포합니다. 예약 계정, 설정, 결과는 Supabase에서 관리합니다.
+- GitHub Actions Secrets에 Supabase 서버 키 `LIBRARY_SUPABASE_SERVICE_KEY`를 설정합니다.
 - Actions의 **Library reservation**에서 날짜를 입력하고 `live`를 끈 채 실행합니다. 신청서까지 확인한 실행 로그에 시설 이용 규정과 확인값이 표시됩니다.
 - 검토한 확인값을 Actions Variables의 `LIBRARY_APPROVED_TERMS_HASH`에 설정합니다. 실제 예약을 신청할 때는 같은 워크플로에서 `live`를 켭니다.

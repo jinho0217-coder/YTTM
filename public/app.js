@@ -2,6 +2,7 @@ const state = { model: null, member: "all", role: "all", meetingView: "coming", 
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
+const LIBRARY_ENDPOINT = clean(window.YTTM_CONFIG?.libraryEndpoint);
 const THEME_EDIT_FIELDS = ["Theme", "Theme Question", "Word of the day", "Quote of the day"];
 const SPECIAL_EDIT_FIELDS = ["Special Event"];
 const AWARD_EDIT_FIELDS = ["Best Speaker", "Best evaluator", "Best table topic speaker"];
@@ -14,6 +15,19 @@ const ROLE_EDIT_FIELDS = [
   "Chairperson", "Toastmaster", "General Evaluator", "Table Topic Master", "Timer",
   "Ah Counter", "Grammarian", "Word & Quote Master", "Quiz Master", "Table Topic Evaluator",
 ];
+
+async function libraryRequest(payload) {
+  if (!LIBRARY_ENDPOINT) throw new Error("예약 서버 설정이 필요합니다.");
+  const response = await fetch(LIBRARY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(12000),
+  });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.error || "예약 서버 요청에 실패했습니다.");
+  return result;
+}
 
 async function apiRequest(payload) {
   if (!WRITE_ENDPOINT) throw new Error("The shared draft service is not configured.");
@@ -671,7 +685,7 @@ function initializeLibrarySettings() {
     pending = true;
     setText("librarySettingsStatus", "처리 중…");
     try {
-      const result = await apiRequest({ action: "librarySettings", operation, accessKey, ...fields });
+      const result = await libraryRequest({ action: "librarySettings", operation, accessKey, ...fields });
       if (!dialog.open) return;
       toggle.setAttribute("aria-checked", String(result.enabled));
       toggle.textContent = result.enabled ? "자동 예약 켜짐" : "자동 예약 꺼짐";
@@ -1207,14 +1221,21 @@ function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
   const bookingIcon = document.getElementById("libraryBookingStatus");
-  const bookingRows = state.sheetPayload?.reservationCsv ? parseCsv(state.sheetPayload.reservationCsv).slice(1) : [];
-  const booking = meeting && bookingRows.find(row => row[0] === sheetDateValue(meeting.date) && row[2] === "13:00-14:00");
-  const status = ["success", "failed"].includes(booking?.[1]) ? booking[1] : "unknown";
-  const label = { success: "도서관 예약 완료", failed: "도서관 미예약", unknown: "도서관 예약 확인 필요" }[status];
   bookingIcon.hidden = !meeting || meeting.noMeeting;
-  bookingIcon.dataset.status = status;
-  bookingIcon.title = label;
-  bookingIcon.setAttribute("aria-label", label);
+  const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
+  const updateBookingIcon = (status = "unknown") => {
+    const label = { success: "도서관 예약 완료", failed: "도서관 미예약", unknown: "도서관 예약 확인 필요" }[status];
+    bookingIcon.dataset.status = status;
+    bookingIcon.title = label;
+    bookingIcon.setAttribute("aria-label", label);
+  };
+  if (bookingIcon.dataset.date !== bookingDate) updateBookingIcon();
+  bookingIcon.dataset.date = bookingDate;
+  if (bookingDate) {
+    libraryRequest({ action: "status", date: bookingDate }).then(({ status }) => {
+      if (bookingIcon.dataset.date === bookingDate) updateBookingIcon(status);
+    }).catch(() => {});
+  }
   document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
   document.querySelectorAll("[data-edit-section]").forEach(button => {

@@ -6,33 +6,23 @@ const { planReservation } = require("./library-reservation-plan");
 const { runReservation } = require("./library-run-state");
 
 const BASE = "https://zyiosfhyjwkmfprhmdem.supabase.co";
-const SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbxD9aeHp1wtRfqhBk-8Yo9eG9-x_vEpWoeu2ztgLSAIRUMnn05qrkAOnkfpjsSTFn2u/exec";
 
-async function rpc(name, body) {
+async function rest(path, body) {
   const key = process.env.LIBRARY_SUPABASE_SERVICE_KEY;
   if (!key) throw new Error("서버 인증 정보가 없습니다.");
-  const response = await fetch(`${BASE}/rest/v1/rpc/${name}`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+  const response = await fetch(`${BASE}/rest/v1/${path}`, { method: body === undefined ? "GET" : "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error("서버 요청 실패");
-  return response.json();
+  const payload = await response.text();
+  return payload ? JSON.parse(payload) : null;
 }
 
-async function recordSheet(date, hours, result) {
-  const token = process.env.LIBRARY_WORKER_TOKEN;
-  if (!token) throw new Error("시트 연결 설정이 없습니다.");
-  const response = await fetch(SHEET_ENDPOINT, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: "recordLibraryReservation", token, date, hours, status: result.status }), signal: AbortSignal.timeout(15000) });
-  if (!response.ok || !(await response.json()).ok) throw new Error("시트 기록 실패");
+function rpc(name, body) {
+  return rest("rpc/" + name, body);
 }
 
 async function automaticBookingEnabled() {
-  const response = await fetch(SHEET_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action: "librarySchedule", token: process.env.LIBRARY_WORKER_TOKEN }),
-    signal: AbortSignal.timeout(15000),
-  });
-  const settings = await response.json();
-  if (!response.ok || !settings.ok) throw new Error("자동 예약 설정을 확인할 수 없습니다.");
-  return settings.enabled === true;
+  const [settings] = await rest("library_booking_settings?select=enabled&id=eq.true");
+  return settings?.enabled === true;
 }
 
 async function main() {
@@ -52,8 +42,8 @@ async function main() {
   const duration = Number(process.env.LIBRARY_DURATION || 1);
   const dryRun = !scheduled && process.env.LIBRARY_LIVE !== "1";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) throw new Error("예약 날짜가 필요합니다.");
-  if (!dryRun && (!process.env.LIBRARY_WORKER_TOKEN || !/^[a-f0-9]{64}$/.test(process.env.LIBRARY_APPROVED_TERMS_HASH || ""))) {
-    throw new Error("실제 신청에는 승인한 이용 규정과 시트 연결 설정이 필요합니다.");
+  if (!dryRun && !/^[a-f0-9]{64}$/.test(process.env.LIBRARY_APPROVED_TERMS_HASH || "")) {
+    throw new Error("실제 신청에는 승인한 이용 규정이 필요합니다.");
   }
   const hours = `${String(startHour).padStart(2, "0")}:00-${String(startHour + duration).padStart(2, "0")}:00`;
   const accounts = [];
@@ -117,7 +107,16 @@ async function main() {
       return { status: verified.status === "success" ? "success" : "unknown" };
     };
     let claimed = false;
-    const result = await runReservation({ dryRun, inspect, submit, claim: async () => { claimed = await rpc("library_claim_run", { p_date: date }); return claimed; }, finish: async value => { if (claimed) await rpc("library_finish_run", { p_date: date, p_state: value.status }); await recordSheet(date, hours, value); } });
+    const result = await runReservation({
+      dryRun, inspect, submit,
+      claim: async () => {
+        claimed = await rpc("library_claim_run", { p_date: date });
+        return claimed;
+      },
+      finish: value => rpc("library_record_result", {
+        p_date: date, p_hours: hours, p_status: value.status, p_claimed: claimed,
+      }),
+    });
     process.stdout.write(`예약 상태: ${result.status}\n`);
     if (result.status === "unknown") process.stdout.write(`확인 필요 단계: ${inspectionStage}\n`);
   } finally {
@@ -127,7 +126,7 @@ async function main() {
 
 const requiredSettings = ["LIBRARY_SUPABASE_SERVICE_KEY"];
 if (process.env.LIBRARY_LIVE === "1" || process.env.LIBRARY_SCHEDULED === "1") {
-  requiredSettings.push("LIBRARY_WORKER_TOKEN", "LIBRARY_APPROVED_TERMS_HASH");
+  requiredSettings.push("LIBRARY_APPROVED_TERMS_HASH");
 }
 const missingSettings = requiredSettings.filter(name => !process.env[name]?.trim());
 if (missingSettings.length) {

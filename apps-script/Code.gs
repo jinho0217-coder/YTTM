@@ -53,14 +53,12 @@ function readSheetPayload() {
   const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   const roles = spreadsheet.getSheetByName(ROLES_SHEET);
   const agenda = spreadsheet.getSheetByName(AGENDA_SHEET);
-  const reservations = spreadsheet.getSheetByName("Library_Reservations");
   if (!roles) throw new Error(`${ROLES_SHEET} was not found.`);
   if (!agenda) throw new Error(`${AGENDA_SHEET} was not found.`);
   return {
     ok: true,
     rolesCsv: sheetCsv(roles),
     agendaCsv: sheetCsv(agenda),
-    reservationCsv: reservations ? sheetCsv(reservations) : "",
     fetchedAt: new Date().toISOString(),
     source: `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?gid=${roles.getSheetId()}`,
   };
@@ -322,97 +320,6 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
-    if (request.action === "librarySchedule") {
-      const properties = PropertiesService.getScriptProperties();
-      const token = properties.getProperty("LIBRARY_WORKER_TOKEN");
-      if (!token || request.token !== token) throw new Error("Access denied.");
-      return jsonResponse({ ok: true, enabled: properties.getProperty("LIBRARY_AUTO_ENABLED") === "true" });
-    }
-    if (request.action === "librarySettings") {
-      const properties = PropertiesService.getScriptProperties();
-      requirePin(request.accessKey);
-      const operation = request.operation;
-      if (!["read", "toggle", "save", "delete"].includes(operation)) throw new Error("잘못된 요청입니다.");
-      const callAccounts = payload => {
-        const response = UrlFetchApp.fetch("https://zyiosfhyjwkmfprhmdem.supabase.co/functions/v1/library-accounts", {
-          method: "post",
-          contentType: "application/json",
-          headers: { apikey: "sb_publishable_hsO6L9Woq4LQfIhYjddxNA_c1XI764w" },
-          payload: JSON.stringify(payload),
-          muteHttpExceptions: true,
-        });
-        if (response.getResponseCode() !== 200) throw new Error("도서관 계정 처리에 실패했습니다.");
-        return JSON.parse(response.getContentText());
-      };
-      if (operation === "save" || operation === "delete") {
-        const slot = Number(request.slot);
-        if (![1, 2, 3].includes(slot)) throw new Error("계정 번호를 확인하세요.");
-        if (operation === "save") {
-          const username = String(request.username || "").trim();
-          const password = String(request.password || "");
-          if (!username || !password) throw new Error("아이디와 비밀번호를 입력하세요.");
-          callAccounts({ action: "save", slot, username, password, label: `계정 ${slot}`, reason: "영어 동호회 활동", participants: 20, consent: true });
-        } else {
-          callAccounts({ action: "delete", slot });
-        }
-      }
-      const { accounts } = callAccounts({ action: "list" });
-      const slots = accounts.map(account => Number(account.slot)).filter(slot => [1, 2, 3].includes(slot));
-      if (operation === "toggle") {
-        if (request.enabled === true && slots.length === 0) throw new Error("계정을 하나 이상 등록하세요.");
-        properties.setProperty("LIBRARY_AUTO_ENABLED", String(request.enabled === true));
-      }
-      if (operation === "delete" && !slots.length) properties.setProperty("LIBRARY_AUTO_ENABLED", "false");
-      return operationResponse(request, { ok: true, slots, enabled: properties.getProperty("LIBRARY_AUTO_ENABLED") === "true" });
-    }
-    if (request.action === "startLibraryReservation") {
-      const properties = PropertiesService.getScriptProperties();
-      requirePin(request.accessKey);
-      const githubToken = properties.getProperty("LIBRARY_GITHUB_TOKEN");
-      if (!githubToken) throw new Error("예약 실행 설정이 필요합니다.");
-      const date = String(request.date || "");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("예약 날짜를 확인하세요.");
-      const target = new Date(date + "T00:00:00Z");
-      const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
-      if (!Number.isFinite(target.getTime()) || target.toISOString().slice(0, 10) !== date || target.getUTCDay() !== 0 || date < today) {
-        throw new Error("오늘 이후의 일요일을 선택하세요.");
-      }
-      const cache = CacheService.getScriptCache();
-      const dispatchKey = "libraryDispatch:" + date;
-      if (cache.get(dispatchKey)) return operationResponse(request, { ok: true });
-      let response;
-      try {
-        response = UrlFetchApp.fetch("https://api.github.com/repos/jinho0217-coder/YTTM/actions/workflows/library-reservation.yml/dispatches", {
-          method: "post",
-          contentType: "application/json",
-          headers: { Authorization: "Bearer " + githubToken, Accept: "application/vnd.github+json" },
-          payload: JSON.stringify({ ref: "main", inputs: { date, live: "true" } }),
-          muteHttpExceptions: true,
-        });
-      } catch (_) {
-        throw new Error("예약 실행 요청을 확인할 수 없습니다. Actions 실행 내역을 확인하세요.");
-      }
-      if (![200, 204].includes(response.getResponseCode())) throw new Error("GitHub에서 예약 실행 요청을 거부했습니다.");
-      cache.put(dispatchKey, "1", 600);
-      return operationResponse(request, { ok: true });
-    }
-    if (request.action === "recordLibraryReservation") {
-      const secret = PropertiesService.getScriptProperties().getProperty("LIBRARY_WORKER_TOKEN");
-      if (!secret || request.token !== secret) throw new Error("Access denied.");
-      const date = String(request.date || "");
-      const status = String(request.status || "");
-      const hours = String(request.hours || "");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !["success", "failed", "unknown"].includes(status) || !/^\d{2}:00-\d{2}:00$/.test(hours)) throw new Error("Invalid result.");
-      const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-      let sheet = spreadsheet.getSheetByName("Library_Reservations");
-      if (!sheet) { sheet = spreadsheet.insertSheet("Library_Reservations"); sheet.appendRow(["date", "status", "hours", "updated_at"]); }
-      const rows = sheet.getDataRange().getDisplayValues();
-      const matches = rows.slice(1).map((row, index) => row[0] === date ? index + 2 : 0).filter(Boolean);
-      if (matches.length > 1) throw new Error("Duplicate result rows require review.");
-      const row = matches[0] || sheet.getLastRow() + 1;
-      sheet.getRange(row, 1, 1, 4).setValues([[date, status, hours, new Date().toISOString()]]);
-      return operationResponse(request, { ok: true });
-    }
     // Reloads and retries reuse the same ID: acknowledge an already committed
     // draft without writing it twice or creating a false version conflict.
     if (request.action === "saveDraft" && /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
