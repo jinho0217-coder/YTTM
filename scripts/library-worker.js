@@ -1,6 +1,5 @@
 const { createRequire } = require("node:module");
 const path = require("node:path");
-const { createHash } = require("node:crypto");
 const { login, readHistory, selectSlots, submitPreparedReservation } = require("./library-browser");
 const { planReservation } = require("./library-reservation-plan");
 const { runReservation } = require("./library-run-state");
@@ -42,9 +41,6 @@ async function main() {
   const duration = Number(process.env.LIBRARY_DURATION || 1);
   const dryRun = !scheduled && process.env.LIBRARY_LIVE !== "1";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) throw new Error("예약 날짜가 필요합니다.");
-  if (!dryRun && !/^[a-f0-9]{64}$/.test(process.env.LIBRARY_APPROVED_TERMS_HASH || "")) {
-    throw new Error("실제 신청에는 승인한 이용 규정이 필요합니다.");
-  }
   const hours = `${String(startHour).padStart(2, "0")}:00-${String(startHour + duration).padStart(2, "0")}:00`;
   const accounts = [];
   for (let slot = 1; slot <= 3; slot += 1) {
@@ -87,11 +83,6 @@ async function main() {
       const participants = Number(account.participants);
       if (!account.reason?.trim() || !Number.isInteger(participants) || participants < 6) return { status: "unknown" };
       await page.getByRole("textbox", { name: "예약사유", exact: true }).fill(`${account.reason.trim()}\n참석 인원: ${participants}명`);
-      const terms = body.slice(body.indexOf("1. 신청조건 확인"), body.lastIndexOf("예약사유")).replace(/\s+/g, " ").trim();
-      if (!terms.startsWith("1. 신청조건 확인") || !terms.includes("책임") || !terms.includes("동의")) return { status: "unknown" };
-      const termsHash = createHash("sha256").update(terms).digest("hex");
-      if (dryRun) process.stdout.write(`이용 규정: ${terms}\n이용 규정 확인값: ${termsHash}\n`);
-      else if (termsHash !== process.env.LIBRARY_APPROVED_TERMS_HASH) return { status: "unknown", reason: "이용 규정 변경 확인 필요" };
       return plan;
     };
     const submit = async accountId => {
@@ -124,13 +115,8 @@ async function main() {
   }
 }
 
-const requiredSettings = ["LIBRARY_SUPABASE_SERVICE_KEY"];
-if (process.env.LIBRARY_LIVE === "1" || process.env.LIBRARY_SCHEDULED === "1") {
-  requiredSettings.push("LIBRARY_APPROVED_TERMS_HASH");
-}
-const missingSettings = requiredSettings.filter(name => !process.env[name]?.trim());
-if (missingSettings.length) {
-  process.stderr.write(`필수 설정 누락: ${missingSettings.join(", ")}\n`);
+if (!process.env.LIBRARY_SUPABASE_SERVICE_KEY?.trim()) {
+  process.stderr.write("필수 설정 누락: LIBRARY_SUPABASE_SERVICE_KEY\n");
   process.exitCode = 1;
 } else {
   main().catch(() => {

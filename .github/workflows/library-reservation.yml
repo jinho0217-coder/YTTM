@@ -39,4 +39,3 @@ jobs:
           LIBRARY_LIVE: ${{ inputs.live && '1' || '0' }}
           LIBRARY_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
           LIBRARY_SUPABASE_SERVICE_KEY: ${{ secrets.LIBRARY_SUPABASE_SERVICE_KEY }}
-          LIBRARY_APPROVED_TERMS_HASH: ${{ vars.LIBRARY_APPROVED_TERMS_HASH }}
