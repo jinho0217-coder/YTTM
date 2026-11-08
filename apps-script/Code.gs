@@ -330,8 +330,7 @@ function doPost(event) {
     }
     if (request.action === "librarySettings") {
       const properties = PropertiesService.getScriptProperties();
-      const key = properties.getProperty("LIBRARY_DISPATCH_KEY");
-      if (!key || key.length < 32 || request.accessKey !== key) throw new Error("예약 실행 키를 확인하세요.");
+      requirePin(request.accessKey);
       const operation = request.operation;
       if (!["read", "toggle", "save", "delete"].includes(operation)) throw new Error("잘못된 요청입니다.");
       const callAccounts = payload => {
@@ -368,10 +367,9 @@ function doPost(event) {
     }
     if (request.action === "startLibraryReservation") {
       const properties = PropertiesService.getScriptProperties();
-      const accessKey = properties.getProperty("LIBRARY_DISPATCH_KEY");
+      requirePin(request.accessKey);
       const githubToken = properties.getProperty("LIBRARY_GITHUB_TOKEN");
-      if (!accessKey || accessKey.length < 32 || !githubToken) throw new Error("예약 실행 설정이 필요합니다.");
-      if (request.accessKey !== accessKey) throw new Error("예약 실행 키를 확인하세요.");
+      if (!githubToken) throw new Error("예약 실행 설정이 필요합니다.");
       const date = String(request.date || "");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("예약 날짜를 확인하세요.");
       const target = new Date(date + "T00:00:00Z");

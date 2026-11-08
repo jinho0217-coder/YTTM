@@ -39,7 +39,7 @@ The dashboard calls the same `/exec` URL with `action=getSheets` to read the liv
 The service accepts the immediately previous regular meeting plus every meeting date from the current Korean-time cutoff onward. It only updates allowlisted rows in `26_Roles`; older past meetings, dates, meeting numbers, other sheets, structure, and formulas are not writable through this endpoint. The allowlist includes the `Special Event` row.
 # 도서관 예약 실행기
 
-YTTM의 Admin 팝업에서 달력 아이콘을 열고 예약 실행 키를 입력합니다. 예약 실행자에게만 알려줄 32자 이상의 임의 값을 Script Properties의 `LIBRARY_DISPATCH_KEY`에 설정하고 Apps Script 웹 앱 배포를 갱신합니다. 자동 예약을 켜면 매주 월요일 10:17 한국 시간에 시작되는 워크플로가 다음 일요일 13:00~14:00을 조회합니다. 스위치의 기본값은 꺼짐입니다.
+YTTM의 Admin 팝업에서 달력 아이콘을 열고 구글 시트 변경 승인에 사용하는 4자리 관리자 PIN을 입력합니다. 이 변경을 적용하려면 Apps Script 웹 앱 배포를 갱신합니다. 자동 예약을 켜면 매주 월요일 10:17 한국 시간에 시작되는 워크플로가 다음 일요일 13:00~14:00을 조회합니다. 스위치의 기본값은 꺼짐입니다.
 
 - Apps Script의 Script Properties에 `LIBRARY_WORKER_TOKEN`을 설정하고 기존 웹 앱을 새 버전으로 배포합니다.
 - GitHub Actions Secrets에 같은 `LIBRARY_WORKER_TOKEN`과 Supabase 서버 키 `LIBRARY_SUPABASE_SERVICE_KEY`를 설정합니다.

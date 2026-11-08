@@ -244,7 +244,7 @@
     <dialog id="librarySettingsDialog" class="admin-dialog" aria-labelledby="librarySettingsTitle">
       <div class="missing-dialog-heading"><h2 id="librarySettingsTitle">도서관 자동 예약</h2><button type="button" class="dialog-close" id="closeLibrarySettings" aria-label="닫기">×</button></div>
       <form id="libraryAccessForm" class="pin-change-fields">
-        <label class="admin-pin-field">예약 실행 키<input name="accessKey" type="password" required autocomplete="off"></label>
+        <label class="admin-pin-field">구글 시트 변경 승인 비밀번호<input name="accessKey" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off"></label>
         <button type="submit" class="primary-button">열기</button>
       </form>
       <div id="librarySettingsControls" class="pin-change-fields" hidden>
