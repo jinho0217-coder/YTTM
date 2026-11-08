@@ -96,9 +96,22 @@ async function selectSlots(page, date, startHour, duration, reportStage = () => 
     reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 확인`);
     const row = page.getByRole("row").filter({ hasText: `${hour}:00 ~ ${hour + 1}:00` });
     if (await row.count() !== 1) throw new Error("예약 시간표 확인 필요");
-    const box = row.getByRole("checkbox");
-    if (await box.count() !== 1 || !await box.isEnabled()) return false;
-    boxes.push(box);
+    const controls = row.getByRole("checkbox").or(row.getByRole("radio"));
+    try {
+      await controls.first().waitFor({ timeout: 5000 });
+    } catch {
+      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 없음`);
+      return false;
+    }
+    if (await controls.count() !== 1) {
+      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 중복`);
+      return false;
+    }
+    if (!await controls.isEnabled()) {
+      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 비활성`);
+      return false;
+    }
+    boxes.push(controls);
   }
   for (const box of boxes) await box.check();
   return true;
