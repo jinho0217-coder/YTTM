@@ -66,7 +66,7 @@ async function main() {
         inspectionStage = "도서관 로그인";
         await login(page, account);
         inspectionStage = "예약 내역 조회";
-        history.push(...await readHistory(page, account.id, monthStart, monthEnd));
+        history.push(...await readHistory(page, account.id, monthStart, monthEnd, stage => { inspectionStage = stage; }));
         verifiedAccounts.push(account.id);
         sessions.set(account.id, { context, page, account });
       }
