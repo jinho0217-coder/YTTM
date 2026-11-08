@@ -23,11 +23,34 @@ async function recordSheet(date, hours, result) {
   if (!response.ok || !(await response.json()).ok) throw new Error("시트 기록 실패");
 }
 
+async function automaticBookingEnabled() {
+  const response = await fetch(SHEET_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ action: "librarySchedule", token: process.env.LIBRARY_WORKER_TOKEN }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const settings = await response.json();
+  if (!response.ok || !settings.ok) throw new Error("자동 예약 설정을 확인할 수 없습니다.");
+  return settings.enabled === true;
+}
+
 async function main() {
-  const date = process.env.LIBRARY_TARGET_DATE;
+  const scheduled = process.env.LIBRARY_SCHEDULED === "1";
+  if (scheduled && !await automaticBookingEnabled()) {
+    process.stdout.write("자동 예약 꺼짐\n");
+    return;
+  }
+  let date = process.env.LIBRARY_TARGET_DATE;
+  if (scheduled) {
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", dateStyle: "short" }).format(new Date());
+    const sunday = new Date(today + "T00:00:00Z");
+    sunday.setUTCDate(sunday.getUTCDate() + (7 - sunday.getUTCDay()) % 7);
+    date = sunday.toISOString().slice(0, 10);
+  }
   const startHour = Number(process.env.LIBRARY_START_HOUR || 13);
   const duration = Number(process.env.LIBRARY_DURATION || 1);
-  const dryRun = process.env.LIBRARY_LIVE !== "1";
+  const dryRun = !scheduled && process.env.LIBRARY_LIVE !== "1";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) throw new Error("예약 날짜가 필요합니다.");
   if (!dryRun && (!process.env.LIBRARY_WORKER_TOKEN || !/^[a-f0-9]{64}$/.test(process.env.LIBRARY_APPROVED_TERMS_HASH || ""))) {
     throw new Error("실제 신청에는 승인한 이용 규정과 시트 연결 설정이 필요합니다.");
@@ -82,6 +105,7 @@ async function main() {
       return plan;
     };
     const submit = async accountId => {
+      if (scheduled && !await automaticBookingEnabled()) return { status: "unknown" };
       const { page } = sessions.get(accountId);
       inspectionStage = "예약 제출";
       await page.getByRole("radio", { name: "동의", exact: true }).check();
@@ -102,7 +126,7 @@ async function main() {
 }
 
 const requiredSettings = ["LIBRARY_SUPABASE_SERVICE_KEY"];
-if (process.env.LIBRARY_LIVE === "1") {
+if (process.env.LIBRARY_LIVE === "1" || process.env.LIBRARY_SCHEDULED === "1") {
   requiredSettings.push("LIBRARY_WORKER_TOKEN", "LIBRARY_APPROVED_TERMS_HASH");
 }
 const missingSettings = requiredSettings.filter(name => !process.env[name]?.trim());

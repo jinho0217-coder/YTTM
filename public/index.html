@@ -235,9 +235,33 @@
           <label class="admin-pin-field">Confirm new PIN<input id="confirmAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
         </div>
         <p id="changePinStatus" class="meeting-edit-status" role="status"></p>
-        <div class="meeting-edit-actions"><button type="submit" class="primary-button">Change PIN</button></div>
+        <div class="meeting-edit-actions">
+          <button type="button" id="requestLibraryBooking" class="manual-library-booking library-settings-icon" aria-label="도서관 자동 예약 설정" title="도서관 자동 예약 설정"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18m-13 5 3 3 5-5"/></svg></button>
+          <button type="submit" class="primary-button">Change PIN</button>
+        </div>
       </form>
-      <div class="meeting-edit-actions"><button type="button" id="requestLibraryBooking" class="manual-library-booking">도서관 예약 실행</button></div>
+    </dialog>
+    <dialog id="librarySettingsDialog" class="admin-dialog" aria-labelledby="librarySettingsTitle">
+      <div class="missing-dialog-heading"><h2 id="librarySettingsTitle">도서관 자동 예약</h2><button type="button" class="dialog-close" id="closeLibrarySettings" aria-label="닫기">×</button></div>
+      <form id="libraryAccessForm" class="pin-change-fields">
+        <label class="admin-pin-field">예약 실행 키<input name="accessKey" type="password" required autocomplete="off"></label>
+        <button type="submit" class="primary-button">열기</button>
+      </form>
+      <div id="librarySettingsControls" class="pin-change-fields" hidden>
+        <button id="libraryAutoSwitch" type="button" class="manual-library-booking" role="switch" aria-checked="false">자동 예약 꺼짐</button>
+        <div class="library-account-slots" aria-label="예약 계정">
+          <button type="button" class="manual-library-booking" data-library-slot="1" aria-label="계정 1">1</button>
+          <button type="button" class="manual-library-booking" data-library-slot="2" aria-label="계정 2">2</button>
+          <button type="button" class="manual-library-booking" data-library-slot="3" aria-label="계정 3">3</button>
+        </div>
+        <div id="libraryAccountActions" hidden><p id="libraryAccountQuestion"></p><button type="button" id="enterLibraryAccount" class="secondary-button">입력</button> <button type="button" id="deleteLibraryAccount" class="secondary-button">삭제</button></div>
+        <form id="libraryCredentialForm" hidden>
+          <label class="admin-pin-field">아이디<input name="username" required autocomplete="off"></label>
+          <label class="admin-pin-field">비밀번호<input name="password" type="password" required autocomplete="new-password"></label>
+          <button type="submit" class="primary-button">저장</button>
+        </form>
+      </div>
+      <p id="librarySettingsStatus" class="meeting-edit-status" role="status"></p>
     </dialog>
     <dialog id="guestGuideDialog" class="guest-guide-dialog" aria-labelledby="guestGuideTitle">
       <div class="guest-guide-shell">

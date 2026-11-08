@@ -322,6 +322,50 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    if (request.action === "librarySchedule") {
+      const properties = PropertiesService.getScriptProperties();
+      const token = properties.getProperty("LIBRARY_WORKER_TOKEN");
+      if (!token || request.token !== token) throw new Error("Access denied.");
+      return jsonResponse({ ok: true, enabled: properties.getProperty("LIBRARY_AUTO_ENABLED") === "true" });
+    }
+    if (request.action === "librarySettings") {
+      const properties = PropertiesService.getScriptProperties();
+      const key = properties.getProperty("LIBRARY_DISPATCH_KEY");
+      if (!key || key.length < 32 || request.accessKey !== key) throw new Error("예약 실행 키를 확인하세요.");
+      const operation = request.operation;
+      if (!["read", "toggle", "save", "delete"].includes(operation)) throw new Error("잘못된 요청입니다.");
+      const callAccounts = payload => {
+        const response = UrlFetchApp.fetch("https://zyiosfhyjwkmfprhmdem.supabase.co/functions/v1/library-accounts", {
+          method: "post",
+          contentType: "application/json",
+          headers: { apikey: "sb_publishable_hsO6L9Woq4LQfIhYjddxNA_c1XI764w" },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true,
+        });
+        if (response.getResponseCode() !== 200) throw new Error("도서관 계정 처리에 실패했습니다.");
+        return JSON.parse(response.getContentText());
+      };
+      if (operation === "save" || operation === "delete") {
+        const slot = Number(request.slot);
+        if (![1, 2, 3].includes(slot)) throw new Error("계정 번호를 확인하세요.");
+        if (operation === "save") {
+          const username = String(request.username || "").trim();
+          const password = String(request.password || "");
+          if (!username || !password) throw new Error("아이디와 비밀번호를 입력하세요.");
+          callAccounts({ action: "save", slot, username, password, label: `계정 ${slot}`, reason: "영어 동호회 활동", participants: 20, consent: true });
+        } else {
+          callAccounts({ action: "delete", slot });
+        }
+      }
+      const { accounts } = callAccounts({ action: "list" });
+      const slots = accounts.map(account => Number(account.slot)).filter(slot => [1, 2, 3].includes(slot));
+      if (operation === "toggle") {
+        if (request.enabled === true && slots.length === 0) throw new Error("계정을 하나 이상 등록하세요.");
+        properties.setProperty("LIBRARY_AUTO_ENABLED", String(request.enabled === true));
+      }
+      if (operation === "delete" && !slots.length) properties.setProperty("LIBRARY_AUTO_ENABLED", "false");
+      return operationResponse(request, { ok: true, slots, enabled: properties.getProperty("LIBRARY_AUTO_ENABLED") === "true" });
+    }
     if (request.action === "startLibraryReservation") {
       const properties = PropertiesService.getScriptProperties();
       const accessKey = properties.getProperty("LIBRARY_DISPATCH_KEY");

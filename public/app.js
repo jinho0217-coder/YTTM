@@ -654,25 +654,81 @@ function activeMeeting() {
   return state.model.regularMeetings[state.model.comingMeetingIndex + state.meetingOffset] || null;
 }
 
-async function requestLibraryBooking(event) {
-  const meeting = activeMeeting();
-  if (!meeting) return;
-  const date = sheetDateValue(meeting.date);
-  const button = event.currentTarget;
-  const accessKey = window.prompt(`${date} 커뮤니티룸 2, 13:00~14:00 예약을 실행하려면 예약 실행 키를 입력하세요.`);
-  if (!accessKey) return;
-  button.disabled = true;
-  button.textContent = "요청 중…";
-  try {
-    await apiRequest({ action: "startLibraryReservation", date, accessKey });
-    button.textContent = "실행 요청됨";
-    window.alert("예약 실행 요청을 보냈습니다. 최종 결과는 GitHub Actions와 예약 내역에서 확인할 수 있습니다.");
-  } catch (error) {
-    button.textContent = "도서관 예약 실행";
-    window.alert(error.message);
-  } finally {
-    button.disabled = false;
+function initializeLibrarySettings() {
+  const get = id => document.getElementById(id);
+  const dialog = get("librarySettingsDialog");
+  const accessForm = get("libraryAccessForm");
+  const credentialForm = get("libraryCredentialForm");
+  const controls = get("librarySettingsControls");
+  const actions = get("libraryAccountActions");
+  const toggle = get("libraryAutoSwitch");
+  const slots = [...dialog.querySelectorAll("[data-library-slot]")];
+  let accessKey = "";
+  let slot;
+  let pending = false;
+  async function update(operation, fields = {}) {
+    if (pending) return;
+    pending = true;
+    setText("librarySettingsStatus", "처리 중…");
+    try {
+      const result = await apiRequest({ action: "librarySettings", operation, accessKey, ...fields });
+      if (!dialog.open) return;
+      toggle.setAttribute("aria-checked", String(result.enabled));
+      toggle.textContent = result.enabled ? "자동 예약 켜짐" : "자동 예약 꺼짐";
+      for (const icon of slots) {
+        const occupied = result.slots.includes(Number(icon.dataset.librarySlot));
+        icon.dataset.occupied = String(occupied);
+        icon.setAttribute("aria-label", `계정 ${icon.dataset.librarySlot} ${occupied ? "등록됨" : "비어 있음"}`);
+      }
+      controls.hidden = false;
+      accessForm.hidden = true;
+      actions.hidden = true;
+      credentialForm.hidden = true;
+      setText("librarySettingsStatus", "");
+    } catch (error) {
+      setText("librarySettingsStatus", error.message);
+    } finally {
+      pending = false;
+    }
   }
+  get("requestLibraryBooking").onclick = () => {
+    if (!pending) dialog.showModal();
+  };
+  get("closeLibrarySettings").onclick = () => dialog.close();
+  dialog.addEventListener("close", () => {
+    accessKey = "";
+    accessForm.reset();
+    credentialForm.reset();
+    accessForm.hidden = false;
+    controls.hidden = true;
+    setText("librarySettingsStatus", "");
+  });
+  accessForm.onsubmit = event => {
+    event.preventDefault();
+    if (pending) return;
+    accessKey = accessForm.elements.accessKey.value;
+    accessForm.reset();
+    update("read");
+  };
+  toggle.onclick = () => update("toggle", { enabled: toggle.getAttribute("aria-checked") !== "true" });
+  for (const icon of slots) icon.onclick = () => {
+    if (pending) return;
+    slot = Number(icon.dataset.librarySlot);
+    setText("libraryAccountQuestion", `계정 ${slot}을 입력할까요, 삭제할까요?`);
+    get("deleteLibraryAccount").disabled = icon.dataset.occupied !== "true";
+    actions.hidden = false;
+    credentialForm.reset();
+    credentialForm.hidden = true;
+  };
+  get("enterLibraryAccount").onclick = () => { credentialForm.hidden = false; credentialForm.elements.username.focus(); };
+  get("deleteLibraryAccount").onclick = () => update("delete", { slot });
+  credentialForm.onsubmit = event => {
+    event.preventDefault();
+    if (pending || !window.confirm("계정 소유자가 도서관 자동 예약에 이 계정을 사용하는 데 동의했습니까?")) return;
+    const { username, password } = Object.fromEntries(new FormData(credentialForm));
+    credentialForm.reset();
+    update("save", { slot, username, password });
+  };
 }
 
 function canEditActiveMeeting() {
@@ -1151,7 +1207,6 @@ function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
   const bookingIcon = document.getElementById("libraryBookingStatus");
-  const bookingButton = document.getElementById("requestLibraryBooking");
   const bookingRows = state.sheetPayload?.reservationCsv ? parseCsv(state.sheetPayload.reservationCsv).slice(1) : [];
   const booking = meeting && bookingRows.find(row => row[0] === sheetDateValue(meeting.date) && row[2] === "13:00-14:00");
   const status = ["success", "failed"].includes(booking?.[1]) ? booking[1] : "unknown";
@@ -1160,7 +1215,6 @@ function renderThisWeek(model) {
   bookingIcon.dataset.status = status;
   bookingIcon.title = label;
   bookingIcon.setAttribute("aria-label", label);
-  bookingButton.disabled = !meeting || meeting.noMeeting || status === "success" || !WRITE_ENDPOINT;
   document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
@@ -1884,6 +1938,6 @@ document.addEventListener("click", event => {
 const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 initializeMeetingPeople();
 initializeRoleSuggestions();
-document.getElementById("requestLibraryBooking").addEventListener("click", requestLibraryBooking);
+initializeLibrarySettings();
 setActiveTab(initialTab, false);
 loadDashboard(false);

@@ -1,6 +1,8 @@
 name: Library reservation
 
 on:
+  schedule:
+    - cron: '17 1 * * 1'
   workflow_dispatch:
     inputs:
       date:
@@ -35,6 +37,7 @@ jobs:
         env:
           LIBRARY_TARGET_DATE: ${{ inputs.date }}
           LIBRARY_LIVE: ${{ inputs.live && '1' || '0' }}
+          LIBRARY_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
           LIBRARY_SUPABASE_SERVICE_KEY: ${{ secrets.LIBRARY_SUPABASE_SERVICE_KEY }}
           LIBRARY_WORKER_TOKEN: ${{ secrets.LIBRARY_WORKER_TOKEN }}
           LIBRARY_APPROVED_TERMS_HASH: ${{ vars.LIBRARY_APPROVED_TERMS_HASH }}

@@ -843,3 +843,9 @@ footer p { text-align: right; }
 .library-booking-status[data-status="success"] .library-mark-success,
 .library-booking-status[data-status="failed"] .library-mark-failed,
 .library-booking-status[data-status="unknown"] .library-mark-unknown { display: inline; }
+.library-settings-icon { margin-right: auto; padding-inline: 8px; }
+.library-account-slots { display: flex; gap: 10px; }
+.library-account-slots button { min-width: 36px; border-color: #6d7378; color: #52595f; background: #eef0f2; }
+.library-account-slots [data-occupied="true"],
+#libraryAutoSwitch[aria-checked="true"] { color: #195b3d; background: #e2f5e9; border-color: #23704b; }
+#librarySettingsDialog [hidden] { display: none; }
