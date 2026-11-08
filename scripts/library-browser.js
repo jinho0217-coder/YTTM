@@ -108,7 +108,19 @@ async function selectSlots(page, date, startHour, duration, reportStage = () => 
       return false;
     }
     if (!await controls.isEnabled()) {
-      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 비활성`);
+      const label = (await row.innerText()).replace(/\s+/g, "");
+      const availability = label.match(/접수전|신청전|예약전|예약완료|예약마감|신청마감|예약불가|신청불가|이용불가|마감/)?.[0];
+      console.log("예약 시간 컨트롤 구조:", JSON.stringify(await row.locator("input, button, label, [role=button], [role=checkbox], [role=radio]").evaluateAll(elements =>
+        elements.map(element => ({
+          tag: element.tagName,
+          type: element.getAttribute("type"),
+          role: element.getAttribute("role"),
+          disabled: element.matches(":disabled"),
+          ariaDisabled: element.getAttribute("aria-disabled"),
+          disabledAncestor: Boolean(element.closest('[aria-disabled="true"]')),
+        }))
+      )));
+      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 비활성${availability ? ` (도서관 표시: ${availability})` : ""}`);
       return false;
     }
     boxes.push(controls);
