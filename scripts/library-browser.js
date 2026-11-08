@@ -26,9 +26,20 @@ async function readHistory(page, accountId, start, end, reportStage = () => {}) 
   await dates.nth(0).press("Enter");
   await dates.nth(1).fill(end);
   await dates.nth(1).press("Enter");
-  reportStage("예약 내역 검색");
-  await page.getByRole("button", { name: "검색", exact: true }).click();
-  await page.waitForLoadState("networkidle");
+  const countPattern = /^전체\s*\d+\s*건$/;
+  const resultCount = page.getByText(countPattern);
+  const previousCount = await resultCount.count() === 1
+    ? await resultCount.elementHandle({ timeout: 3000 })
+    : null;
+  const previousText = await previousCount?.innerText();
+  reportStage("예약 내역 검색 버튼 클릭");
+  await page.getByRole("button", { name: "검색", exact: true }).click({ timeout: 15000 });
+  reportStage("예약 내역 검색 결과 대기");
+  if (previousCount) {
+    await page.waitForFunction(({ node, text }) => !node.isConnected || node.innerText !== text,
+      { node: previousCount, text: previousText }, { timeout: 15000 });
+  }
+  await resultCount.waitFor({ timeout: 15000 });
   reportStage("예약 내역 건수 확인");
   const text = await page.locator("body").innerText();
   const count = text.match(/전체\s*(\d+)\s*건/);
