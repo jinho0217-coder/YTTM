@@ -1,4 +1,4 @@
-name: Library reservation
+name: Library reservation check
 
 on:
   schedule:
@@ -9,10 +9,6 @@ on:
         description: Reservation date in YYYY-MM-DD (KST)
         required: true
         type: string
-      live:
-        description: Submit a real reservation
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +32,5 @@ jobs:
       - run: node scripts/library-worker.js
         env:
           LIBRARY_TARGET_DATE: ${{ inputs.date }}
-          LIBRARY_LIVE: ${{ inputs.live && '1' || '0' }}
           LIBRARY_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
           LIBRARY_SUPABASE_SERVICE_KEY: ${{ secrets.LIBRARY_SUPABASE_SERVICE_KEY }}

@@ -844,6 +844,52 @@ footer p { text-align: right; }
 .library-booking-status[data-status="failed"] .library-mark-failed,
 .library-booking-status[data-status="unknown"] .library-mark-unknown { display: inline; }
 .library-settings-icon { margin-right: auto; padding-inline: 8px; }
+.library-dialog { width: min(100% - 28px, 510px); }
+.library-dialog [hidden] { display: none; }
+.library-dialog .eyebrow { margin: 0 0 4px; }
+.library-booking-card, .library-auto-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 14px;
+  padding: 14px;
+  border: 1px solid #ddd0bd;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+.library-booking-card p, .library-auto-card p { margin: 0; color: #635843; font-size: .82rem; }
+.library-auto-card { align-items: center; }
+.library-auto-card p { margin-top: 4px; }
+.library-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #4f473a;
+  font: inherit;
+  cursor: pointer;
+}
+.library-toggle-track { width: 42px; height: 24px; border-radius: 20px; background: #6f6860; padding: 3px; }
+.library-toggle-track::after {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .16s ease;
+}
+.library-toggle[aria-checked="true"] .library-toggle-track { background: #26714b; }
+.library-toggle[aria-checked="true"] .library-toggle-track::after { transform: translateX(18px); }
+.library-dialog .library-account-slots { align-items: center; flex-wrap: wrap; }
+.library-dialog .library-account-slots strong { margin-right: auto; }
+@media (max-width: 380px) {
+  .library-booking-card { grid-template-columns: 1fr; }
+  .library-booking-card button { justify-self: start; }
+}
 .library-account-slots { display: flex; gap: 10px; }
 .library-account-slots button { min-width: 36px; border-color: #6d7378; color: #52595f; background: #eef0f2; }
 .library-account-slots [data-occupied="true"],

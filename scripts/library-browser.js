@@ -1,5 +1,4 @@
 const BASE = "https://www.library.kr/ggl";
-const ROOM = "커뮤니티룸 2";
 
 async function login(page, account) {
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
@@ -59,84 +58,4 @@ async function readHistory(page, accountId, start, end, reportStage = () => {}) 
   });
 }
 
-async function selectSlots(page, date, startHour, duration, reportStage = () => {}) {
-  await page.goto(`${BASE}/library-service/central-contents/library-playground/community-room/apply-01`, { waitUntil: "domcontentloaded" });
-  reportStage("커뮤니티룸 2 선택");
-  await page.getByRole("radio", { name: ROOM, exact: true }).check();
-  const target = new Date(`${date}T00:00:00Z`);
-  const nowParts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).formatToParts(new Date());
-  const current = Object.fromEntries(nowParts.map(part => [part.type, part.value]));
-  const steps = (target.getUTCFullYear() - Number(current.year)) * 12 + target.getUTCMonth() + 1 - Number(current.month);
-  if (steps < 0 || steps > 2) throw new Error("조회 가능한 날짜가 아닙니다.");
-  for (let index = 0; index < steps; index += 1) await page.getByRole("button", { name: "Next month", exact: true }).click();
-  reportStage("예약 달력에서 날짜 확인");
-  let dateCell = page.getByRole("cell", { name: date, exact: true })
-    .or(page.getByRole("gridcell", { name: date, exact: true }));
-  if (!await dateCell.count()) {
-    const day = String(target.getUTCDate());
-    const dayCell = page.getByRole("gridcell", { name: new RegExp(`^${day}(?:일)?$`) });
-    if (await dayCell.count() === 1) dateCell = dayCell;
-  }
-  try {
-    await dateCell.waitFor({ timeout: 10000 });
-  } catch (error) {
-    console.log("예약 달력 구조:", JSON.stringify({
-      cells: await page.getByRole("cell").count(),
-      gridCells: await page.getByRole("gridcell").count(),
-      matchingDate: await dateCell.count(),
-      dateAttributes: await page.locator(`[data-date="${date}"], [title="${date}"], [aria-label="${date}"]`).count(),
-    }));
-    throw error;
-  }
-  if (await dateCell.count() !== 1 || !await dateCell.isEnabled()) return false;
-  await dateCell.click();
-  await page.getByText(`${date}(일)`, { exact: true }).waitFor();
-  const boxes = [];
-  for (let hour = startHour; hour < startHour + duration; hour += 1) {
-    reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 확인`);
-    const row = page.getByRole("row").filter({ hasText: `${hour}:00 ~ ${hour + 1}:00` });
-    if (await row.count() !== 1) throw new Error("예약 시간표 확인 필요");
-    const controls = row.getByRole("checkbox").or(row.getByRole("radio"));
-    try {
-      await controls.first().waitFor({ timeout: 5000 });
-    } catch {
-      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 없음`);
-      return false;
-    }
-    if (await controls.count() !== 1) {
-      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 컨트롤 중복`);
-      return false;
-    }
-    if (!await controls.isEnabled()) {
-      const label = (await row.innerText()).replace(/\s+/g, "");
-      const availability = label.match(/접수전|신청전|예약전|예약완료|예약마감|신청마감|예약불가|신청불가|이용불가|마감/)?.[0];
-      console.log("예약 시간 컨트롤 구조:", JSON.stringify(await row.locator("input, button, label, [role=button], [role=checkbox], [role=radio]").evaluateAll(elements =>
-        elements.map(element => ({
-          tag: element.tagName,
-          type: element.getAttribute("type"),
-          role: element.getAttribute("role"),
-          disabled: element.matches(":disabled"),
-          ariaDisabled: element.getAttribute("aria-disabled"),
-          disabledAncestor: Boolean(element.closest('[aria-disabled="true"]')),
-        }))
-      )));
-      reportStage(`예약 시간 ${hour}:00~${hour + 1}:00 선택 비활성${availability ? ` (도서관 표시: ${availability})` : ""}`);
-      return false;
-    }
-    boxes.push(controls);
-  }
-  for (const box of boxes) await box.check();
-  return true;
-}
-
-async function submitPreparedReservation(page) {
-  const response = page.waitForEvent("dialog", { timeout: 10000 }).then(async dialog => {
-    const accepted = dialog.type() === "alert" && dialog.message().includes("신청이 정상적으로 완료되었습니다.");
-    await dialog.dismiss();
-    return accepted;
-  });
-  const [accepted] = await Promise.all([response, page.getByRole("button", { name: "예약하기", exact: true }).click({ timeout: 10000 })]);
-  return { status: accepted ? "submitted" : "unknown" };
-}
-
-module.exports = { login, readHistory, selectSlots, submitPreparedReservation };
+module.exports = { login, readHistory };

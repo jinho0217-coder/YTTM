@@ -676,6 +676,9 @@ function initializeLibrarySettings() {
   const controls = get("librarySettingsControls");
   const actions = get("libraryAccountActions");
   const toggle = get("libraryAutoSwitch");
+  const bookingForm = get("libraryBookingForm");
+  const bookingDate = get("libraryBookingDate");
+  const runButton = get("libraryRunBooking");
   const slots = [...dialog.querySelectorAll("[data-library-slot]")];
   let accessKey = "";
   let slot;
@@ -683,22 +686,23 @@ function initializeLibrarySettings() {
   async function update(operation, fields = {}) {
     if (pending) return;
     pending = true;
-    setText("librarySettingsStatus", "처리 중…");
+    setText("librarySettingsStatus", "Working…");
     try {
       const result = await libraryRequest({ action: "librarySettings", operation, accessKey, ...fields });
       if (!dialog.open) return;
       toggle.setAttribute("aria-checked", String(result.enabled));
-      toggle.textContent = result.enabled ? "자동 예약 켜짐" : "자동 예약 꺼짐";
+      setText("libraryAutoState", result.enabled ? "On" : "Off");
       for (const icon of slots) {
         const occupied = result.slots.includes(Number(icon.dataset.librarySlot));
         icon.dataset.occupied = String(occupied);
-        icon.setAttribute("aria-label", `계정 ${icon.dataset.librarySlot} ${occupied ? "등록됨" : "비어 있음"}`);
+        icon.setAttribute("aria-label", `Account ${icon.dataset.librarySlot}, ${occupied ? "registered" : "empty"}`);
       }
       controls.hidden = false;
       accessForm.hidden = true;
       actions.hidden = true;
       credentialForm.hidden = true;
-      setText("librarySettingsStatus", "");
+      runButton.disabled = result.slots.length === 0;
+      setText("librarySettingsStatus", operation === "check" ? "Reservation check queued. Refresh after the workflow finishes." : "");
     } catch (error) {
       setText("librarySettingsStatus", error.message);
     } finally {
@@ -706,7 +710,13 @@ function initializeLibrarySettings() {
     }
   }
   get("requestLibraryBooking").onclick = () => {
-    if (!pending) dialog.showModal();
+    if (pending) return;
+    bookingDate.setCustomValidity("");
+    bookingDate.min = sheetDateValue(new Date());
+    const date = new Date(bookingDate.min + "T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() + (7 - date.getUTCDay()) % 7);
+    bookingDate.value = date.toISOString().slice(0, 10);
+    dialog.showModal();
   };
   get("closeLibrarySettings").onclick = () => dialog.close();
   dialog.addEventListener("close", () => {
@@ -725,10 +735,22 @@ function initializeLibrarySettings() {
     update("read");
   };
   toggle.onclick = () => update("toggle", { enabled: toggle.getAttribute("aria-checked") !== "true" });
+  bookingDate.oninput = () => bookingDate.setCustomValidity("");
+  bookingForm.onsubmit = event => {
+    event.preventDefault();
+    if (pending) return;
+    const date = bookingDate.value;
+    if (new Date(date + "T00:00:00Z").getUTCDay() !== 0) {
+      bookingDate.setCustomValidity("Choose a Sunday.");
+      bookingDate.reportValidity();
+      return;
+    }
+    update("check", { date });
+  };
   for (const icon of slots) icon.onclick = () => {
     if (pending) return;
     slot = Number(icon.dataset.librarySlot);
-    setText("libraryAccountQuestion", `계정 ${slot}을 입력할까요, 삭제할까요?`);
+    setText("libraryAccountQuestion", `Manage account ${slot}`);
     get("deleteLibraryAccount").disabled = icon.dataset.occupied !== "true";
     actions.hidden = false;
     credentialForm.reset();
@@ -738,7 +760,7 @@ function initializeLibrarySettings() {
   get("deleteLibraryAccount").onclick = () => update("delete", { slot });
   credentialForm.onsubmit = event => {
     event.preventDefault();
-    if (pending || !window.confirm("계정 소유자가 도서관 자동 예약에 이 계정을 사용하는 데 동의했습니까?")) return;
+    if (pending || !window.confirm("Has the account owner agreed to let YTTM use this account for library bookings?")) return;
     const { username, password } = Object.fromEntries(new FormData(credentialForm));
     credentialForm.reset();
     update("save", { slot, username, password });
@@ -1224,7 +1246,7 @@ function renderThisWeek(model) {
   bookingIcon.hidden = !meeting || meeting.noMeeting;
   const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
   const updateBookingIcon = (status = "unknown") => {
-    const label = { success: "도서관 예약 완료", failed: "도서관 미예약", unknown: "도서관 예약 확인 필요" }[status];
+    const label = { success: "도서관 예약 승인 확인", failed: "도서관 승인 내역 없음", unknown: "도서관 예약 확인 필요" }[status];
     bookingIcon.dataset.status = status;
     bookingIcon.title = label;
     bookingIcon.setAttribute("aria-label", label);

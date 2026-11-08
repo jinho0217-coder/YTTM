@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261108-library-status" />
+    <link rel="stylesheet" href="./styles.css?v=20261108-library-check" />
   </head>
   <body>
     <div class="page-shell">
@@ -236,29 +236,38 @@
         </div>
         <p id="changePinStatus" class="meeting-edit-status" role="status"></p>
         <div class="meeting-edit-actions">
-          <button type="button" id="requestLibraryBooking" class="manual-library-booking library-settings-icon" aria-label="도서관 자동 예약 설정" title="도서관 자동 예약 설정"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18m-13 5 3 3 5-5"/></svg></button>
+          <button type="button" id="requestLibraryBooking" class="manual-library-booking library-settings-icon" aria-label="Library Reservation Check" title="Library Reservation Check"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18m-13 5 3 3 5-5"/></svg></button>
           <button type="submit" class="primary-button">Change PIN</button>
         </div>
       </form>
     </dialog>
-    <dialog id="librarySettingsDialog" class="admin-dialog" aria-labelledby="librarySettingsTitle">
-      <div class="missing-dialog-heading"><h2 id="librarySettingsTitle">도서관 자동 예약</h2><button type="button" class="dialog-close" id="closeLibrarySettings" aria-label="닫기">×</button></div>
+    <dialog id="librarySettingsDialog" class="admin-dialog library-dialog" aria-labelledby="librarySettingsTitle">
+      <div class="missing-dialog-heading"><div><p class="eyebrow">YTTM ADMIN</p><h2 id="librarySettingsTitle">Library Reservation Check</h2></div><button type="button" class="dialog-close" id="closeLibrarySettings" aria-label="Close library booking">×</button></div>
       <form id="libraryAccessForm" class="pin-change-fields">
-        <label class="admin-pin-field">구글 시트 변경 승인 비밀번호<input name="accessKey" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off"></label>
-        <button type="submit" class="primary-button">열기</button>
+        <label class="admin-pin-field">Reservation Admin PIN<input name="accessKey" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off"></label>
+        <button type="submit" class="primary-button">Unlock</button>
       </form>
       <div id="librarySettingsControls" class="pin-change-fields" hidden>
-        <button id="libraryAutoSwitch" type="button" class="manual-library-booking" role="switch" aria-checked="false">자동 예약 꺼짐</button>
-        <div class="library-account-slots" aria-label="예약 계정">
-          <button type="button" class="manual-library-booking" data-library-slot="1" aria-label="계정 1">1</button>
-          <button type="button" class="manual-library-booking" data-library-slot="2" aria-label="계정 2">2</button>
-          <button type="button" class="manual-library-booking" data-library-slot="3" aria-label="계정 3">3</button>
+        <form id="libraryBookingForm" class="library-booking-card">
+          <label class="admin-pin-field">Reservation Date<input id="libraryBookingDate" type="date" required></label>
+          <button type="submit" id="libraryRunBooking" class="primary-button">Check Reservation</button>
+          <p>Sundays · 1:00–2:00 PM KST · <a href="https://github.com/jinho0217-coder/YTTM/actions/workflows/library-reservation.yml" target="_blank" rel="noopener noreferrer">GitHub Actions</a></p>
+        </form>
+        <div class="library-auto-card">
+          <div><strong id="libraryAutoLabel">Auto Check</strong><p>Mondays at 10:17 AM KST</p></div>
+          <button id="libraryAutoSwitch" type="button" class="library-toggle" role="switch" aria-checked="false" aria-labelledby="libraryAutoLabel"><span id="libraryAutoState" aria-hidden="true">Off</span><span class="library-toggle-track" aria-hidden="true"></span></button>
         </div>
-        <div id="libraryAccountActions" hidden><p id="libraryAccountQuestion"></p><button type="button" id="enterLibraryAccount" class="secondary-button">입력</button> <button type="button" id="deleteLibraryAccount" class="secondary-button">삭제</button></div>
+        <div class="library-account-slots" aria-label="Booking accounts">
+          <strong>Booking Accounts</strong>
+          <button type="button" class="manual-library-booking" data-library-slot="1" aria-label="Account 1">1</button>
+          <button type="button" class="manual-library-booking" data-library-slot="2" aria-label="Account 2">2</button>
+          <button type="button" class="manual-library-booking" data-library-slot="3" aria-label="Account 3">3</button>
+        </div>
+        <div id="libraryAccountActions" hidden><p id="libraryAccountQuestion"></p><button type="button" id="enterLibraryAccount" class="secondary-button">Edit</button> <button type="button" id="deleteLibraryAccount" class="secondary-button">Remove</button></div>
         <form id="libraryCredentialForm" hidden>
-          <label class="admin-pin-field">아이디<input name="username" required autocomplete="off"></label>
-          <label class="admin-pin-field">비밀번호<input name="password" type="password" required autocomplete="new-password"></label>
-          <button type="submit" class="primary-button">저장</button>
+          <label class="admin-pin-field">Username<input name="username" required autocomplete="off"></label>
+          <label class="admin-pin-field">Password<input name="password" type="password" required autocomplete="new-password"></label>
+          <button type="submit" class="primary-button">Save Account</button>
         </form>
       </div>
       <p id="librarySettingsStatus" class="meeting-edit-status" role="status"></p>
@@ -370,6 +379,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261108-library-supabase" defer></script>
+    <script src="./app.js?v=20261108-library-check" defer></script>
   </body>
 </html>
