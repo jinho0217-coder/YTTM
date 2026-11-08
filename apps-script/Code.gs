@@ -53,12 +53,14 @@ function readSheetPayload() {
   const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   const roles = spreadsheet.getSheetByName(ROLES_SHEET);
   const agenda = spreadsheet.getSheetByName(AGENDA_SHEET);
+  const reservations = spreadsheet.getSheetByName("Library_Reservations");
   if (!roles) throw new Error(`${ROLES_SHEET} was not found.`);
   if (!agenda) throw new Error(`${AGENDA_SHEET} was not found.`);
   return {
     ok: true,
     rolesCsv: sheetCsv(roles),
     agendaCsv: sheetCsv(agenda),
+    reservationCsv: reservations ? sheetCsv(reservations) : "",
     fetchedAt: new Date().toISOString(),
     source: `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?gid=${roles.getSheetId()}`,
   };

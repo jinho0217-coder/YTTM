@@ -835,3 +835,11 @@ footer p { text-align: right; }
 .manual-library-booking:focus-visible {
   background: #eaf4f6;
 }
+.library-booking-status { display: inline-flex; color: #716244; flex: 0 0 auto; }
+.library-booking-status[hidden] { display: none; }
+.library-booking-status[data-status="success"] { color: #23704b; }
+.library-booking-status[data-status="failed"] { color: #ad383d; }
+.library-booking-status [class^="library-mark-"] { display: none; }
+.library-booking-status[data-status="success"] .library-mark-success,
+.library-booking-status[data-status="failed"] .library-mark-failed,
+.library-booking-status[data-status="unknown"] .library-mark-unknown { display: inline; }

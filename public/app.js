@@ -668,7 +668,7 @@ async function requestLibraryBooking(event) {
     button.textContent = "실행 요청됨";
     window.alert("예약 실행 요청을 보냈습니다. 최종 결과는 GitHub Actions와 예약 내역에서 확인할 수 있습니다.");
   } catch (error) {
-    button.textContent = "도서관 예약";
+    button.textContent = "도서관 예약 실행";
     window.alert(error.message);
   } finally {
     button.disabled = false;
@@ -1150,6 +1150,17 @@ function renderSpeeches(model) {
 function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
+  const bookingIcon = document.getElementById("libraryBookingStatus");
+  const bookingButton = document.getElementById("requestLibraryBooking");
+  const bookingRows = state.sheetPayload?.reservationCsv ? parseCsv(state.sheetPayload.reservationCsv).slice(1) : [];
+  const booking = meeting && bookingRows.find(row => row[0] === sheetDateValue(meeting.date) && row[2] === "13:00-14:00");
+  const status = ["success", "failed"].includes(booking?.[1]) ? booking[1] : "unknown";
+  const label = { success: "도서관 예약 완료", failed: "도서관 미예약", unknown: "도서관 예약 확인 필요" }[status];
+  bookingIcon.hidden = !meeting || meeting.noMeeting;
+  bookingIcon.dataset.status = status;
+  bookingIcon.title = label;
+  bookingIcon.setAttribute("aria-label", label);
+  bookingButton.disabled = !meeting || meeting.noMeeting || status === "success" || !WRITE_ENDPOINT;
   document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
   document.querySelectorAll("[data-edit-section]").forEach(button => {
