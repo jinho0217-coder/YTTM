@@ -70,8 +70,13 @@ async function selectSlots(page, date, startHour, duration, reportStage = () => 
   if (steps < 0 || steps > 2) throw new Error("조회 가능한 날짜가 아닙니다.");
   for (let index = 0; index < steps; index += 1) await page.getByRole("button", { name: "Next month", exact: true }).click();
   reportStage("예약 달력에서 날짜 확인");
-  const dateCell = page.getByRole("cell", { name: date, exact: true })
+  let dateCell = page.getByRole("cell", { name: date, exact: true })
     .or(page.getByRole("gridcell", { name: date, exact: true }));
+  if (!await dateCell.count()) {
+    const day = String(target.getUTCDate());
+    const dayCell = page.getByRole("gridcell", { name: new RegExp(`^${day}(?:일)?$`) });
+    if (await dayCell.count() === 1) dateCell = dayCell;
+  }
   try {
     await dateCell.waitFor({ timeout: 10000 });
   } catch (error) {
