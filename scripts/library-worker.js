@@ -73,7 +73,9 @@ async function main() {
       const plan = planReservation({ date, startHour, duration, accounts, history, verifiedAccounts });
       if (plan.status !== "ready") return plan;
       inspectionStage = "시간대 조회";
-      if (!await selectSlots(sessions.get(plan.accountId).page, date, startHour, duration)) return { status: "failed", reason: "요청 시간 예약 불가" };
+      if (!await selectSlots(sessions.get(plan.accountId).page, date, startHour, duration, stage => { inspectionStage = stage; })) {
+        return { status: "failed", reason: inspectionStage + " 단계에서 선택 불가" };
+      }
       inspectionStage = "신청서 확인";
       const { page, account } = sessions.get(plan.accountId);
       await page.getByRole("button", { name: "다음", exact: true }).click();
@@ -109,6 +111,7 @@ async function main() {
       }),
     });
     process.stdout.write(`예약 상태: ${result.status}\n`);
+    if (result.reason) process.stdout.write(`예약 결과 사유: ${result.reason}\n`);
     if (result.status === "unknown") process.stdout.write(`확인 필요 단계: ${inspectionStage}\n`);
   } finally {
     await browser.close();
