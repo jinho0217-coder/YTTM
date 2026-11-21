@@ -1267,7 +1267,7 @@ function renderLibraryBooking(meeting) {
     bookingIcon.dataset.status = status;
     bookingIcon.setAttribute("aria-label", labels[status]);
     bookingIcon.setAttribute("aria-pressed", String(completed));
-    bookingShortcut.hidden = status !== "failed" || state.meetingOffset !== 0;
+    bookingShortcut.hidden = status !== "failed";
     bookingShortcut.dataset.date = bookingDate;
     if (bookingDate) {
       const nextLabel = labels[completed ? defaultStatus : "success"];
