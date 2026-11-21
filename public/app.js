@@ -709,19 +709,15 @@ function initializeLibrarySettings() {
       pending = false;
     }
   }
-  const openLibrarySettings = (meetingDate = "") => {
+  get("requestLibraryBooking").onclick = () => {
     if (pending) return;
     bookingDate.setCustomValidity("");
     bookingDate.min = sheetDateValue(new Date());
     const date = new Date(bookingDate.min + "T00:00:00Z");
     date.setUTCDate(date.getUTCDate() + (7 - date.getUTCDay()) % 7);
-    bookingDate.value = meetingDate || date.toISOString().slice(0, 10);
-    get("libraryBookingShortcutDetails").hidden = !meetingDate;
-    setText("libraryBookingMeetingDate", meetingDate);
+    bookingDate.value = date.toISOString().slice(0, 10);
     dialog.showModal();
   };
-  get("requestLibraryBooking").onclick = () => openLibrarySettings();
-  get("bookUpcomingLibrary").onclick = event => openLibrarySettings(event.currentTarget.dataset.date);
   get("closeLibrarySettings").onclick = () => dialog.close();
   dialog.addEventListener("close", () => {
     accessKey = "";
@@ -1243,15 +1239,32 @@ function renderSpeeches(model) {
   });
 }
 
-const unsavedLibraryBookings = new Map();
+let completedLibraryBookings = new Set();
+let loadingLibraryBookings = true;
+let libraryBookingWriteVersion = 0;
+let savingLibraryBooking = false;
 
-function libraryBookingIsComplete(bookingDate) {
-  if (unsavedLibraryBookings.has(bookingDate)) return unsavedLibraryBookings.get(bookingDate);
-  try {
-    return localStorage.getItem(`yttm:library-booking:${bookingDate}`) === "complete";
-  } catch {
-    return false;
-  }
+function initializeLibraryBookingMarks() {
+  const icon = document.getElementById("libraryBookingStatus");
+  icon.onclick = async () => {
+    const date = icon.dataset.date;
+    if (!date || savingLibraryBooking || loadingLibraryBookings) return;
+    const completed = !completedLibraryBookings.has(date);
+    savingLibraryBooking = true;
+    icon.disabled = true;
+    setText("libraryBookingMarkMessage", "");
+    try {
+      await libraryRequest({ action: "markBooking", date, completed });
+      libraryBookingWriteVersion++;
+      if (completed) completedLibraryBookings.add(date);
+      else completedLibraryBookings.delete(date);
+    } catch (error) {
+      if (icon.dataset.date === date) setText("libraryBookingMarkMessage", error.message);
+    } finally {
+      savingLibraryBooking = false;
+      renderLibraryBooking(activeMeeting());
+    }
+  };
 }
 
 function libraryBookingDefaultStatus(bookingDate, now = new Date()) {
@@ -1267,10 +1280,12 @@ function renderLibraryBooking(meeting) {
   const bookingIcon = document.getElementById("libraryBookingStatus");
   const bookingShortcut = document.getElementById("bookUpcomingLibrary");
   bookingIcon.hidden = !meeting || meeting.noMeeting;
+  bookingIcon.disabled = loadingLibraryBookings || savingLibraryBooking;
   const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
-  const labels = { success: "도서관 예약 완료", failed: "도서관 미예약", needed: "도서관 예약 필요", unknown: "도서관 예약 확인 필요" };
+  if (bookingIcon.dataset.date !== bookingDate) setText("libraryBookingMarkMessage", "");
+  const labels = { success: "Booking complete", failed: "Not booked", needed: "Booking needed", unknown: "Booking needs confirmation" };
   const updateBookingIcon = () => {
-    const completed = Boolean(bookingDate) && libraryBookingIsComplete(bookingDate);
+    const completed = completedLibraryBookings.has(bookingDate);
     const defaultStatus = libraryBookingDefaultStatus(bookingDate);
     const status = completed ? "success" : defaultStatus;
     bookingIcon.dataset.status = status;
@@ -1282,31 +1297,16 @@ function renderLibraryBooking(meeting) {
       shortcutDate = (state.model?.regularMeetings || [])
         .filter(candidate => !candidate.noMeeting)
         .map(candidate => sheetDateValue(candidate.date))
-        .find(date => libraryBookingDefaultStatus(date, now) === "failed" && !libraryBookingIsComplete(date)) || "";
+        .find(date => libraryBookingDefaultStatus(date, now) === "failed" && !completedLibraryBookings.has(date)) || "";
     }
     bookingShortcut.hidden = !shortcutDate;
-    bookingShortcut.dataset.date = shortcutDate;
+    bookingShortcut.title = shortcutDate ? `Book the library for ${shortcutDate}` : "Book the library";
     if (bookingDate) {
-      const nextLabel = labels[completed ? defaultStatus : "success"];
-      addTooltip(bookingIcon, `회의 날짜: ${bookingDate}\n현재 상태: ${labels[status]}\n클릭하면 ${nextLabel} 상태로 변경됩니다.`);
+      const action = completed ? "clear the booking mark" : "mark this meeting as booked";
+      addTooltip(bookingIcon, `Meeting date: ${bookingDate}\nLibrary status: ${labels[status]}\nClick to ${action}.`);
     }
   };
   bookingIcon.dataset.date = bookingDate;
-  bookingIcon.onclick = bookingDate ? event => {
-    const complete = !libraryBookingIsComplete(bookingDate);
-    try {
-      const key = `yttm:library-booking:${bookingDate}`;
-      if (complete) localStorage.setItem(key, "complete");
-      else localStorage.removeItem(key);
-      unsavedLibraryBookings.delete(bookingDate);
-    } catch {
-      unsavedLibraryBookings.set(bookingDate, complete);
-    }
-    updateBookingIcon();
-    if (bookingIcon.matches(":hover, :focus-visible") && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-      showTooltip(event);
-    }
-  } : null;
   updateBookingIcon();
 }
 
@@ -1537,6 +1537,19 @@ function applyConfirmedDraft(result, meetingDate, section, updates) {
 
 async function loadDashboard(force = false) {
   const loadVersion = ++dashboardLoadVersion;
+  const bookingWriteVersion = libraryBookingWriteVersion;
+  loadingLibraryBookings = true;
+  document.getElementById("libraryBookingStatus").disabled = true;
+  const bookingMarks = libraryRequest({ action: "bookingMarks" }).catch(error => {
+    console.warn("Shared booking marks are temporarily unavailable.", error);
+    return null;
+  });
+  void bookingMarks.then(result => {
+    if (loadVersion !== dashboardLoadVersion) return;
+    if (result && bookingWriteVersion === libraryBookingWriteVersion) completedLibraryBookings = new Set(result.dates);
+    loadingLibraryBookings = false;
+    if (state.model) renderLibraryBooking(activeMeeting());
+  });
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
@@ -2038,5 +2051,6 @@ const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-me
 initializeMeetingPeople();
 initializeRoleSuggestions();
 initializeLibrarySettings();
+initializeLibraryBookingMarks();
 setActiveTab(initialTab, false);
 loadDashboard(false);

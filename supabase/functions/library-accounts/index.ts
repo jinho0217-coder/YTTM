@@ -10,23 +10,42 @@ function reply(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { headers, status });
 }
 
-async function rest(path: string, body?: unknown) {
+async function rest(path: string, body?: unknown, prefer?: string) {
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const response = await fetch(Deno.env.get("SUPABASE_URL") + "/rest/v1/" + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" },
+    headers: { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json", ...(prefer ? { Prefer: prefer } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) throw new Error("Database request failed");
-  return response.json();
+  return prefer?.includes("return=minimal") ? null : response.json();
 }
 
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response(null, { headers });
   if (request.method !== "POST") return reply({ error: "Invalid request." }, 405);
+  let checkingReservation = false;
   try {
     const data = await request.json();
+    checkingReservation = data?.action === "librarySettings" && data.operation === "check";
+    if (data?.action === "bookingMarks") {
+      const rows = await rest("library_booking_marks?select=reservation_date&completed=eq.true");
+      return reply({ ok: true, dates: rows.map((row: { reservation_date: string }) => row.reservation_date) });
+    }
+    if (data?.action === "markBooking") {
+      const date = typeof data.date === "string" ? data.date : "";
+      const target = new Date(date + "T00:00:00Z");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(target.getTime()) ||
+          target.toISOString().slice(0, 10) !== date || typeof data.completed !== "boolean") {
+        return reply({ error: "Check the reservation date and status." }, 400);
+      }
+      await rest("library_booking_marks?on_conflict=reservation_date", {
+        reservation_date: date,
+        completed: data.completed,
+      }, "resolution=merge-duplicates,return=minimal");
+      return reply({ ok: true, completed: data.completed });
+    }
     if (data?.action === "status") {
       if (typeof data.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
         return reply({ error: "Check the reservation date." }, 400);
@@ -95,6 +114,8 @@ Deno.serve(async request => {
     }
     return reply({ ok: true, enabled: result.enabled, slots: result.accounts.map((account: { slot: number }) => account.slot) });
   } catch {
-    return reply({ error: "The booking request could not be confirmed. Check GitHub Actions before retrying." }, 500);
+    return reply({ error: checkingReservation
+      ? "The reservation check could not be confirmed. Check GitHub Actions before retrying."
+      : "The booking service is temporarily unavailable. Try again." }, 500);
   }
 });

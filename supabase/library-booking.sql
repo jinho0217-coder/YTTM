@@ -19,6 +19,14 @@ alter table public.library_booking_results enable row level security;
 revoke all on public.library_booking_results from public, anon, authenticated;
 grant select, insert, update on public.library_booking_results to service_role;
 
+create table public.library_booking_marks (
+  reservation_date date primary key,
+  completed boolean not null
+);
+alter table public.library_booking_marks enable row level security;
+revoke all on public.library_booking_marks from public, anon, authenticated;
+grant select, insert, update on public.library_booking_marks to service_role;
+
 create function public.library_record_result(p_date date, p_hours text, p_status text, p_claimed boolean)
 returns void language plpgsql security invoker set search_path = '' as $$
 begin
