@@ -709,15 +709,19 @@ function initializeLibrarySettings() {
       pending = false;
     }
   }
-  get("requestLibraryBooking").onclick = () => {
+  const openLibrarySettings = (meetingDate = "") => {
     if (pending) return;
     bookingDate.setCustomValidity("");
     bookingDate.min = sheetDateValue(new Date());
     const date = new Date(bookingDate.min + "T00:00:00Z");
     date.setUTCDate(date.getUTCDate() + (7 - date.getUTCDay()) % 7);
-    bookingDate.value = date.toISOString().slice(0, 10);
+    bookingDate.value = meetingDate || date.toISOString().slice(0, 10);
+    get("libraryBookingShortcutDetails").hidden = !meetingDate;
+    setText("libraryBookingMeetingDate", meetingDate);
     dialog.showModal();
   };
+  get("requestLibraryBooking").onclick = () => openLibrarySettings();
+  get("bookUpcomingLibrary").onclick = event => openLibrarySettings(event.currentTarget.dataset.date);
   get("closeLibrarySettings").onclick = () => dialog.close();
   dialog.addEventListener("close", () => {
     accessKey = "";
@@ -1252,6 +1256,7 @@ function libraryBookingDefaultStatus(bookingDate, now = new Date()) {
 
 function renderLibraryBooking(meeting) {
   const bookingIcon = document.getElementById("libraryBookingStatus");
+  const bookingShortcut = document.getElementById("bookUpcomingLibrary");
   bookingIcon.hidden = !meeting || meeting.noMeeting;
   const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
   const labels = { success: "도서관 예약 완료", failed: "도서관 미예약", needed: "도서관 예약 필요", unknown: "도서관 예약 확인 필요" };
@@ -1262,6 +1267,8 @@ function renderLibraryBooking(meeting) {
     bookingIcon.dataset.status = status;
     bookingIcon.setAttribute("aria-label", labels[status]);
     bookingIcon.setAttribute("aria-pressed", String(completed));
+    bookingShortcut.hidden = status !== "failed" || state.meetingOffset !== 0;
+    bookingShortcut.dataset.date = bookingDate;
     if (bookingDate) {
       const nextLabel = labels[completed ? defaultStatus : "success"];
       addTooltip(bookingIcon, `회의 날짜: ${bookingDate}\n현재 상태: ${labels[status]}\n클릭하면 ${nextLabel} 상태로 변경됩니다.`);

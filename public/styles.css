@@ -835,6 +835,10 @@ footer p { text-align: right; }
 .manual-library-booking:focus-visible {
   background: #eaf4f6;
 }
+.library-booking-actions { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.library-booking-actions:has(.library-booking-status[hidden]) { display: none; }
+.library-booking-shortcut { width: 26px; height: 26px; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: #ad383d; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer; }
+.library-booking-shortcut:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .library-booking-status { display: inline-flex; color: #956800; flex: 0 0 auto; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .library-booking-status:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .library-booking-status[hidden] { display: none; }
