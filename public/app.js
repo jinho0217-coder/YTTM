@@ -1243,7 +1243,16 @@ function renderSpeeches(model) {
   });
 }
 
-const completedLibraryBookings = new Set();
+const unsavedLibraryBookings = new Map();
+
+function libraryBookingIsComplete(bookingDate) {
+  if (unsavedLibraryBookings.has(bookingDate)) return unsavedLibraryBookings.get(bookingDate);
+  try {
+    return localStorage.getItem(`yttm:library-booking:${bookingDate}`) === "complete";
+  } catch {
+    return false;
+  }
+}
 
 function libraryBookingDefaultStatus(bookingDate, now = new Date()) {
   const today = sheetDateValue(now);
@@ -1261,14 +1270,22 @@ function renderLibraryBooking(meeting) {
   const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
   const labels = { success: "도서관 예약 완료", failed: "도서관 미예약", needed: "도서관 예약 필요", unknown: "도서관 예약 확인 필요" };
   const updateBookingIcon = () => {
-    const completed = completedLibraryBookings.has(bookingDate);
+    const completed = Boolean(bookingDate) && libraryBookingIsComplete(bookingDate);
     const defaultStatus = libraryBookingDefaultStatus(bookingDate);
     const status = completed ? "success" : defaultStatus;
     bookingIcon.dataset.status = status;
     bookingIcon.setAttribute("aria-label", labels[status]);
     bookingIcon.setAttribute("aria-pressed", String(completed));
-    bookingShortcut.hidden = status !== "failed";
-    bookingShortcut.dataset.date = bookingDate;
+    let shortcutDate = status === "failed" ? bookingDate : "";
+    if (status === "success") {
+      const now = new Date();
+      shortcutDate = (state.model?.regularMeetings || [])
+        .filter(candidate => !candidate.noMeeting)
+        .map(candidate => sheetDateValue(candidate.date))
+        .find(date => libraryBookingDefaultStatus(date, now) === "failed" && !libraryBookingIsComplete(date)) || "";
+    }
+    bookingShortcut.hidden = !shortcutDate;
+    bookingShortcut.dataset.date = shortcutDate;
     if (bookingDate) {
       const nextLabel = labels[completed ? defaultStatus : "success"];
       addTooltip(bookingIcon, `회의 날짜: ${bookingDate}\n현재 상태: ${labels[status]}\n클릭하면 ${nextLabel} 상태로 변경됩니다.`);
@@ -1276,8 +1293,15 @@ function renderLibraryBooking(meeting) {
   };
   bookingIcon.dataset.date = bookingDate;
   bookingIcon.onclick = bookingDate ? event => {
-    if (completedLibraryBookings.has(bookingDate)) completedLibraryBookings.delete(bookingDate);
-    else completedLibraryBookings.add(bookingDate);
+    const complete = !libraryBookingIsComplete(bookingDate);
+    try {
+      const key = `yttm:library-booking:${bookingDate}`;
+      if (complete) localStorage.setItem(key, "complete");
+      else localStorage.removeItem(key);
+      unsavedLibraryBookings.delete(bookingDate);
+    } catch {
+      unsavedLibraryBookings.set(bookingDate, complete);
+    }
     updateBookingIcon();
     if (bookingIcon.matches(":hover, :focus-visible") && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
       showTooltip(event);
