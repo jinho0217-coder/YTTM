@@ -1239,25 +1239,50 @@ function renderSpeeches(model) {
   });
 }
 
-function renderThisWeek(model) {
-  updateMeetingArrowControls();
-  const meeting = activeMeeting();
+const completedLibraryBookings = new Set();
+
+function libraryBookingDefaultStatus(bookingDate, now = new Date()) {
+  const today = sheetDateValue(now);
+  if (!bookingDate || bookingDate < today) return "unknown";
+  const [year, month, day] = today.split("-").map(Number);
+  const lastDayNextMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const cutoff = new Date(Date.UTC(year, month, Math.min(day, lastDayNextMonth))).toISOString().slice(0, 10);
+  return bookingDate <= cutoff ? "failed" : "needed";
+}
+
+function renderLibraryBooking(meeting) {
   const bookingIcon = document.getElementById("libraryBookingStatus");
   bookingIcon.hidden = !meeting || meeting.noMeeting;
   const bookingDate = bookingIcon.hidden ? "" : sheetDateValue(meeting.date);
-  const updateBookingIcon = (status = "unknown") => {
-    const label = { success: "도서관 예약 승인 확인", failed: "도서관 승인 내역 없음", unknown: "도서관 예약 확인 필요" }[status];
+  const labels = { success: "도서관 예약 완료", failed: "도서관 미예약", needed: "도서관 예약 필요", unknown: "도서관 예약 확인 필요" };
+  const updateBookingIcon = () => {
+    const completed = completedLibraryBookings.has(bookingDate);
+    const defaultStatus = libraryBookingDefaultStatus(bookingDate);
+    const status = completed ? "success" : defaultStatus;
     bookingIcon.dataset.status = status;
-    bookingIcon.title = label;
-    bookingIcon.setAttribute("aria-label", label);
+    bookingIcon.setAttribute("aria-label", labels[status]);
+    bookingIcon.setAttribute("aria-pressed", String(completed));
+    if (bookingDate) {
+      const nextLabel = labels[completed ? defaultStatus : "success"];
+      addTooltip(bookingIcon, `회의 날짜: ${bookingDate}\n현재 상태: ${labels[status]}\n클릭하면 ${nextLabel} 상태로 변경됩니다.`);
+    }
   };
-  if (bookingIcon.dataset.date !== bookingDate) updateBookingIcon();
   bookingIcon.dataset.date = bookingDate;
-  if (bookingDate) {
-    libraryRequest({ action: "status", date: bookingDate }).then(({ status }) => {
-      if (bookingIcon.dataset.date === bookingDate) updateBookingIcon(status);
-    }).catch(() => {});
-  }
+  bookingIcon.onclick = bookingDate ? event => {
+    if (completedLibraryBookings.has(bookingDate)) completedLibraryBookings.delete(bookingDate);
+    else completedLibraryBookings.add(bookingDate);
+    updateBookingIcon();
+    if (bookingIcon.matches(":hover, :focus-visible") && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      showTooltip(event);
+    }
+  } : null;
+  updateBookingIcon();
+}
+
+function renderThisWeek(model) {
+  updateMeetingArrowControls();
+  const meeting = activeMeeting();
+  renderLibraryBooking(meeting);
   document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
   document.querySelectorAll("[data-edit-section]").forEach(button => {

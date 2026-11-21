@@ -835,13 +835,15 @@ footer p { text-align: right; }
 .manual-library-booking:focus-visible {
   background: #eaf4f6;
 }
-.library-booking-status { display: inline-flex; color: #716244; flex: 0 0 auto; }
+.library-booking-status { display: inline-flex; color: #956800; flex: 0 0 auto; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.library-booking-status:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .library-booking-status[hidden] { display: none; }
-.library-booking-status[data-status="success"] { color: #23704b; }
+.library-booking-status[data-status="success"] { color: #1d4ed8; }
 .library-booking-status[data-status="failed"] { color: #ad383d; }
 .library-booking-status [class^="library-mark-"] { display: none; }
 .library-booking-status[data-status="success"] .library-mark-success,
 .library-booking-status[data-status="failed"] .library-mark-failed,
+.library-booking-status[data-status="needed"] .library-mark-unknown,
 .library-booking-status[data-status="unknown"] .library-mark-unknown { display: inline; }
 .library-settings-icon { margin-right: auto; padding-inline: 8px; }
 .library-dialog { width: min(100% - 28px, 510px); }
