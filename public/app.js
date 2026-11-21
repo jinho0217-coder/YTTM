@@ -1246,6 +1246,20 @@ let savingLibraryBooking = false;
 
 function initializeLibraryBookingMarks() {
   const icon = document.getElementById("libraryBookingStatus");
+  const shortcut = document.getElementById("bookUpcomingLibrary");
+  shortcut.onclick = () => {
+    if (!state.model || swipeAnimating || !shortcut.dataset.date) return;
+    const targetIndex = state.model.regularMeetings.findIndex(meeting =>
+      !meeting.noMeeting && sheetDateValue(meeting.date) === shortcut.dataset.date
+    );
+    if (targetIndex < 0) return;
+    const targetOffset = targetIndex - state.model.comingMeetingIndex;
+    if (targetOffset === state.meetingOffset) {
+      icon.focus();
+      return;
+    }
+    completeMeetingSwipe(targetOffset, targetOffset < state.meetingOffset ? 1 : -1);
+  };
   icon.onclick = async () => {
     const date = icon.dataset.date;
     if (!date || savingLibraryBooking || loadingLibraryBookings) return;
@@ -1300,7 +1314,9 @@ function renderLibraryBooking(meeting) {
         .find(date => libraryBookingDefaultStatus(date, now) === "failed" && !completedLibraryBookings.has(date)) || "";
     }
     bookingShortcut.hidden = !shortcutDate;
-    bookingShortcut.title = shortcutDate ? `Book the library for ${shortcutDate}` : "Book the library";
+    bookingShortcut.dataset.date = shortcutDate;
+    bookingShortcut.title = shortcutDate ? `Go to unbooked meeting on ${shortcutDate}` : "Go to unbooked meeting";
+    bookingShortcut.setAttribute("aria-label", bookingShortcut.title);
     if (bookingDate) {
       const action = completed ? "clear the booking mark" : "mark this meeting as booked";
       addTooltip(bookingIcon, `Meeting date: ${bookingDate}\nLibrary status: ${labels[status]}\nClick to ${action}.`);

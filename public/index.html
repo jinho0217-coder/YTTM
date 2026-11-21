@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261121-shared-library-booking" />
+    <link rel="stylesheet" href="./styles.css?v=20261121-booking-meeting-slide" />
   </head>
   <body>
     <div class="page-shell">
@@ -109,7 +109,7 @@
               <div class="meeting-title-line">
                 <h2 id="meetingTitle">Loading meeting date</h2>
                 <div class="meeting-number"><span>MEETING</span><strong id="meetingNumber">—</strong></div>
-                <div class="library-booking-actions"><button type="button" id="libraryBookingStatus" class="library-booking-status" data-status="unknown" aria-pressed="false" aria-label="Library booking needs confirmation"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18"/><path class="library-mark-success" d="m8 15 3 3 5-5"/><path class="library-mark-failed" d="m10 13 4 5m0-5-4 5"/><path class="library-mark-unknown" d="M10 14a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.3m0 2h.01"/></svg></button><a id="bookUpcomingLibrary" class="library-booking-shortcut" href="https://www.library.kr/ggl/" target="_blank" rel="noopener noreferrer" aria-label="Book the library" title="Book the library" hidden>!</a></div>
+                <div class="library-booking-actions"><button type="button" id="libraryBookingStatus" class="library-booking-status" data-status="unknown" aria-pressed="false" aria-label="Library booking needs confirmation"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18"/><path class="library-mark-success" d="m8 15 3 3 5-5"/><path class="library-mark-failed" d="m10 13 4 5m0-5-4 5"/><path class="library-mark-unknown" d="M10 14a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.3m0 2h.01"/></svg></button><button type="button" id="bookUpcomingLibrary" class="library-booking-shortcut" aria-label="Go to unbooked meeting" hidden>!</button></div>
               </div>
               <p id="libraryBookingMarkMessage" class="library-booking-mark-message" role="status"></p>
               <div class="meeting-action-row">
@@ -380,6 +380,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261121-shared-library-booking" defer></script>
+    <script src="./app.js?v=20261121-booking-meeting-slide" defer></script>
   </body>
 </html>
