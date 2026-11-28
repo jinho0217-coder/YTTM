@@ -7,7 +7,10 @@ const DRAFTS_PROPERTY = "YTTM_SHARED_DRAFTS";
 const DRAFTS_MANIFEST_PROPERTY = DRAFTS_PROPERTY + "_MANIFEST";
 const AUDIT_PROPERTY = "YTTM_CHANGE_AUDIT";
 
+const TABLE_TOPIC_FIELDS = Array.from({ length: 8 }, (_, index) => "Table Topics Speaker " + (index + 1));
+
 const EDITABLE_FIELDS = {
+  tableTopics: TABLE_TOPIC_FIELDS,
   attendees: ["Attendees"],
   theme: ["Theme", "Theme Question", "Word of the day", "Quote of the day"],
   special: ["Special Event"],
@@ -54,9 +57,11 @@ function readSheetPayload() {
   if (!roles) throw new Error(`${ROLES_SHEET} was not found.`);
   if (!agenda) throw new Error(`${AGENDA_SHEET} was not found.`);
   const nextRoles = spreadsheet.getSheetByName(NEXT_ROLES_SHEET);
+  const nextAgenda = spreadsheet.getSheetByName("27_Agenda");
   return {
     ok: true,
     nextYearRolesCsv: nextRoles ? sheetCsv(nextRoles) : null,
+    nextYearTableTopicNames: nextAgenda?.getRange("N42:N49").getDisplayValues().map(([name]) => name) || null,
     rolesCsv: sheetCsv(roles),
     agendaCsv: sheetCsv(agenda),
     fetchedAt: new Date().toISOString(),
@@ -239,12 +244,14 @@ function syncPrimarySheetJob() {
   if (!job) return false;
   try {
     const meetings = meetingSheetTargets(meetingSheetContexts());
+    const agendaTargets = new Map();
     const targets = job.writes.map(item => {
-      const target = meetings.find(entry => entry.date === item.meetingDate);
+      const target = draftSheetTarget(meetings, item.meetingDate, item.section, agendaTargets);
       if (!target) throw new Error("Sheet layout changed.");
       const { column, context } = target;
       const row = context.rowByLabel.get(item.label);
       if (!column || (!row && item.label !== "Attendees")) throw new Error("Sheet layout changed.");
+      if (item.section === "tableTopics" && context.sheet.getRange(row, column).getFormula()) throw new Error("The speaker cell contains a formula.");
       const current = row ? String(context.values[row - 1]?.[column - 1] ?? "").trim() : "";
       if (!job.force && current !== item.previousValue && current !== item.value) {
         throw new Error("Google Sheets changed after approval. Restore or reconcile the affected cell before retry.");
@@ -261,7 +268,7 @@ function syncPrimarySheetJob() {
         context.sheet.getRange(row, 1).setValue(item.label);
         context.rowByLabel.set(item.label, row);
       }
-      context.sheet.getRange(row, item.column).setValue(item.value.startsWith("=") ? "'" + item.value : item.value);
+      context.sheet.getRange(row, item.column).setValue(sheetLiteral(item.value));
     });
     SpreadsheetApp.flush();
     return primaryRequest("rpc/yttm_finish_sheet_job", { p_id: job.id, p_attempt: job.attempt });
@@ -392,6 +399,7 @@ function validatedUpdates(section, updates) {
   entries.forEach(([label, rawValue]) => {
     if (!allowedFields.has(label)) throw new Error(`Field is not allowed: ${label}`);
     const value = String(rawValue ?? "").trim();
+    if (section === "tableTopics" && (value.length > 100 || /[\r\n]/.test(value))) throw new Error("Enter one speaker name per slot, up to 100 characters.");
     if (value.length > (section === "attendees" ? 6000 : 500)) throw new Error(`Value is too long: ${label}`);
     if (section === "attendees" && value) {
       const people = JSON.parse(value);
@@ -423,27 +431,29 @@ function tableTopicSpeakerRange(year) {
   const sheetName = year === "2026" ? AGENDA_SHEET : "27_Agenda";
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
   if (!sheet) throw new Error(`${sheetName} was not found.`);
-  return { sheetName, range: sheet.getRange("N42:N49") };
+  return { sheetName, sheet, range: sheet.getRange("N42:N49") };
 }
 
-function saveTableTopicSpeakers(request) {
-  const validNames = names => Array.isArray(names) && names.length === 8 &&
-    names.every(name => typeof name === "string" && name.length <= 100 && !/[\r\n]/.test(name));
-  if (!validNames(request.names) || !Array.isArray(request.previousNames) || request.previousNames.length !== 8 ||
-      !request.previousNames.every(name => typeof name === "string")) throw new Error("Enter up to eight speaker names, one per slot.");
-  requirePin(request.pin);
-  const { sheetName, range } = tableTopicSpeakerRange(request.year);
-  const names = request.names.map(name => name.trim());
-  const current = range.getDisplayValues().map(([name]) => name);
-  if (current.some((name, index) => name !== request.previousNames[index] && name !== names[index])) {
-    throw new Error("Speaker names changed in Google Sheets. Reopen this form to review the latest list.");
+function sheetLiteral(value) {
+  return /^[=']/.test(value) ? "'" + value : value;
+}
+
+function draftSheetTarget(meetings, date, section, agendaTargets = new Map()) {
+  if (section !== "tableTopics") return meetings.find(entry => entry.date === date);
+  // The eight Agenda slots are shared by all meetings in the same year.
+  if (!/^(2026|2027)-01-01$/.test(date)) throw new Error("Invalid agenda draft date.");
+  if (!agendaTargets.has(date)) {
+    const { sheet, range } = tableTopicSpeakerRange(date.slice(0, 4));
+    const values = [];
+    const rowByLabel = new Map();
+    range.getDisplayValues().forEach(([name], index) => {
+      rowByLabel.set(TABLE_TOPIC_FIELDS[index], 42 + index);
+      values[41 + index] = [];
+      values[41 + index][13] = name;
+    });
+    agendaTargets.set(date, { date, column: 14, context: { sheet, values, rowByLabel } });
   }
-  if (range.getFormulas().some(([formula]) => formula)) throw new Error("The speaker range contains a formula. Review it in Google Sheets.");
-  if (current.some((name, index) => name !== names[index])) {
-    range.setValues(names.map(name => [name.startsWith("=") || name.startsWith("'") ? "'" + name : name]));
-    SpreadsheetApp.flush();
-  }
-  return operationResponse(request, { ok: true, sheetName, names });
+  return agendaTargets.get(date);
 }
 
 function doGet(event) {
@@ -552,7 +562,6 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
-    if (request.action === "saveTableTopicSpeakers") return saveTableTopicSpeakers(request);
     if (primaryConfigured() && ["saveDraft", "applyDrafts", "reconcileSheet"].includes(request.action) &&
         /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
       const [receipt] = primaryRequest("yttm_save_receipts?request_id=eq." + request.requestId + "&select=result");
@@ -583,7 +592,9 @@ function doPost(event) {
     contexts.forEach(context => confirmDueAssignments(context, readDrafts(), today));
 
     if (request.action === "saveDraft") {
-      const target = requireAllowedMeeting({ allowedMeetings }, request.meetingDate);
+      const target = request.section === "tableTopics"
+        ? draftSheetTarget(meetings, saveDate, request.section)
+        : requireAllowedMeeting({ allowedMeetings }, request.meetingDate);
       const { context } = target;
       const updates = validatedUpdates(request.section, request.updates);
       Object.keys(updates).forEach(label => { updates[label] = confirmedValueOnDate(label, updates[label], target.date, today); });
@@ -654,6 +665,7 @@ function doPost(event) {
       }
       const conflicts = [];
       const writes = [];
+      const agendaTargets = new Map();
       const allEntries = [];
       if (request.selectionMode !== "explicit" || !Array.isArray(request.selections)) {
         throw new Error("A complete explicit selection is required. No changes were applied.");
@@ -675,12 +687,14 @@ function doPost(event) {
             const key = fieldKey(meetingDate, section, label);
             allEntries.push({ meetingDate, section, label, value: updates[label] });
             if (!selectedKeys.has(key)) return;
-            const target = meetings.find(column => column.date === meetingDate);
+            const target = draftSheetTarget(meetings, meetingDate, section, agendaTargets);
             if (!target) throw new Error("The selected meeting date was not found in Google Sheets.");
             const { context } = target;
             const row = context.rowByLabel.get(label);
             if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
-            const currentValue = row ? String(context.sheet.getRange(row, target.column).getValue() ?? "").trim() : "";
+            const cell = row ? context.sheet.getRange(row, target.column) : null;
+            if (section === "tableTopics" && cell.getFormula()) throw new Error("The speaker cell contains a formula.");
+            const currentValue = String((section === "tableTopics" ? cell.getDisplayValue() : cell?.getValue()) ?? "").trim();
             const baseValue = String(drafts.bases?.[meetingDate]?.[section]?.[label] ?? currentValue).trim();
             if (currentValue !== baseValue) conflicts.push({ meetingDate, section, label, sheetValue: currentValue, draftValue: updates[label] });
             writes.push({ meetingDate, section, label, row, column: target.column, previousValue: currentValue, value: updates[label] });
@@ -706,7 +720,7 @@ function doPost(event) {
         catch (error) { console.error("Sheet sync queued for retry.", error); }
         return operationResponse(request, { ok: true, applied: true, syncPending, revision: saved.revision, updated: writes.length, remaining: allEntries.length - writes.length });
       }
-      const sheetsByDate = new Map(meetings.map(target => [target.date, target.context]));
+      const sheetsByDate = new Map([...meetings, ...agendaTargets.values()].map(target => [target.date, target.context]));
       let completed = 0;
       try {
         writes.forEach(item => {
@@ -721,7 +735,7 @@ function doPost(event) {
             }
             item.row = row;
           }
-          context.sheet.getRange(item.row, item.column).setValue(item.value);
+          context.sheet.getRange(item.row, item.column).setValue(item.section === "tableTopics" ? sheetLiteral(item.value) : item.value);
           completed += 1;
         });
         SpreadsheetApp.flush();

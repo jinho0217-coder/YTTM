@@ -639,53 +639,65 @@ function showAgendaDetails(item) {
   setText("agendaDialogTitle", item.title);
   document.getElementById("agendaDialogDetails").innerHTML = agendaDetailHtml(item);
   document.getElementById("agendaDetailsDialog").showModal();
-  if (item.tableTopicYear && WRITE_ENDPOINT) void showTableTopicSpeakers(item.tableTopicYear);
+  if (item.tableTopicYear && WRITE_ENDPOINT) showTableTopicSpeakers(item.tableTopicYear);
 }
 
-async function showTableTopicSpeakers(year) {
+function showTableTopicSpeakers(year) {
   const form = document.createElement("form");
   form.className = "table-topic-speaker-form";
   form.innerHTML = `<h3>Table Topics speakers</h3>
     <p class="table-topic-sheet-location"></p>
-    <p role="status" class="meeting-edit-status">Loading speaker names…</p>`;
+    <p role="status" class="meeting-edit-status"></p>`;
   document.getElementById("agendaDialogDetails").appendChild(form);
   const status = form.querySelector("[role=status]");
-  try {
-    const result = await jsonpRequest("getTableTopicSpeakers", { year });
-    if (!result.ok) throw new Error(result.error || "Unable to load speaker names.");
-    if (!form.isConnected || !document.getElementById("agendaDetailsDialog").open) return;
-    let previousNames = result.names;
-    form.querySelector(".table-topic-sheet-location").textContent = `${result.sheetName} · N42:N49 · One list for ${year}`;
-    status.insertAdjacentHTML("beforebegin", `<fieldset class="table-topic-speaker-fields">
-      <legend class="sr-only">Speaker names</legend>
-      ${previousNames.map((name, index) => `<div class="meeting-edit-field"><label for="table-topic-speaker-${index}">Speaker ${index + 1}</label><input id="table-topic-speaker-${index}" data-speaker-name maxlength="100" value="${escapeHtml(name)}" autocomplete="off"></div>`).join("")}
-      <label class="admin-pin-field">Administrator PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
-      <button type="submit" class="primary-button">Save speaker names</button>
-    </fieldset>`);
-    status.textContent = "";
-    const fields = form.querySelector("fieldset");
-    const inputs = [...form.querySelectorAll("[data-speaker-name]")];
-    form.onsubmit = async event => {
-      event.preventDefault();
-      const names = inputs.map(input => input.value.trim());
-      const pin = form.elements.pin.value;
-      form.elements.pin.value = "";
-      fields.disabled = true;
-      status.textContent = "Saving speaker names…";
-      try {
-        const saved = await apiRequest({ action: "saveTableTopicSpeakers", year, pin, names, previousNames });
-        previousNames = saved.names;
-        inputs.forEach((input, index) => { input.value = saved.names[index]; });
-        status.textContent = `Saved to ${saved.sheetName}!N42:N49.`;
-      } catch (error) {
-        status.textContent = error.message;
-      } finally {
-        fields.disabled = false;
-      }
-    };
-  } catch (error) {
-    status.textContent = error.message;
+  const { agendaCsv, nextYearTableTopicNames } = state.sheetPayload || {};
+  const agendaRows = year === "2026" && agendaCsv ? parseCsv(agendaCsv) : null;
+  const sheetNames = agendaRows?.[40]?.[13] === "Table Topic Speaker"
+    ? Array.from({ length: 8 }, (_, index) => agendaRows[41 + index]?.[13] || "")
+    : year === "2027" ? nextYearTableTopicNames : null;
+  if (!sheetNames || sheetNames.length !== 8) {
+    status.textContent = "Speaker names are unavailable. Refresh the meeting schedule and try again.";
+    return;
   }
+  const drafts = state.sharedDrafts;
+  const meetingDate = `${year}-01-01`;
+  const section = "tableTopics";
+  const labels = sheetNames.map((_, index) => `Table Topics Speaker ${index + 1}`);
+  const baseValues = Object.fromEntries(labels.map((label, index) => [label, sheetNames[index]]));
+  const draftValues = drafts.meetings?.[meetingDate]?.[section] || {};
+  let previousNames = labels.map(label => draftValues[label] ?? baseValues[label]);
+  const fieldVersions = Object.fromEntries(labels.map(label => [label, drafts.fieldVersions?.[`${meetingDate}|${section}|${label}`] || 0]));
+  form.querySelector(".table-topic-sheet-location").textContent = `${year.slice(2)}_Agenda · N42:N49 · One list for ${year}`;
+  status.insertAdjacentHTML("beforebegin", `<fieldset class="table-topic-speaker-fields">
+    <legend class="sr-only">Speaker names</legend>
+    ${previousNames.map((name, index) => `<div class="meeting-edit-field"><label for="table-topic-speaker-${index}">Speaker ${index + 1}</label><input id="table-topic-speaker-${index}" data-speaker-name maxlength="100" value="${escapeHtml(name)}" autocomplete="off"></div>`).join("")}
+    <button type="submit" class="primary-button">Save speaker names</button>
+  </fieldset>`);
+  status.textContent = "";
+  const fields = form.querySelector("fieldset");
+  const inputs = [...form.querySelectorAll("[data-speaker-name]")];
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const names = inputs.map(input => input.value.trim());
+    const updates = Object.fromEntries(labels.flatMap((label, index) => names[index] === previousNames[index] ? [] : [[label, names[index]]]));
+    if (!Object.keys(updates).length) return;
+    fields.disabled = true;
+    status.textContent = "Saving speaker names…";
+    try {
+      const saved = await apiRequest({ action: "saveDraft", meetingDate, section, updates, baseValues, fieldVersions });
+      if (saved.drafts && Number(saved.drafts.revision) >= Number(state.sharedDrafts.revision || 0)) {
+        applyConfirmedDraft(saved, meetingDate, section, updates);
+      }
+      const currentDrafts = saved.drafts || state.sharedDrafts;
+      Object.keys(updates).forEach(label => { fieldVersions[label] = currentDrafts.fieldVersions?.[`${meetingDate}|${section}|${label}`] || 0; });
+      previousNames = names;
+      status.textContent = "Saved as a shared draft. Google Sheets updates after administrator approval.";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      fields.disabled = false;
+    }
+  };
 }
 
 function configureDetailsEditor(section = "", field = "") {
@@ -1050,8 +1062,8 @@ function openAdminApplyDialog() {
     <label class="admin-apply-item">
       <input type="checkbox" data-apply-change="${index}" checked>
       <span class="admin-apply-toggle" aria-hidden="true"></span>
-      <time>${escapeHtml(entry.meetingDate)}</time>
-      <strong>${escapeHtml(entry.section)} · ${escapeHtml(entry.label)}</strong>
+      <time>${escapeHtml(entry.section === "tableTopics" ? `${entry.meetingDate.slice(0, 4)} Agenda` : entry.meetingDate)}</time>
+      <strong>${escapeHtml(entry.section === "tableTopics" ? entry.label : `${entry.section} · ${entry.label}`)}</strong>
       <span class="admin-apply-value">${escapeHtml(entry.value || "(clear value)")}</span>
     </label>`).join("");
   document.getElementById("adminApplyDetails").open = true;

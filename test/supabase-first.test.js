@@ -66,28 +66,54 @@ test("2027 meetings follow 2026 and join role values by their row labels", () =>
   ]);
 });
 
-test("Table Topics speakers save only to the selected agenda range and reject stale edits", () => {
+test("Table Topics names save without a PIN and only reach the agenda after approval", () => {
   const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
-  let names = ["Previous", "", "", "", "", "", "", ""];
-  const context = vm.createContext({ SpreadsheetApp: {
-    flush() {},
-    openById: () => ({ getSheetByName: name => {
-      assert.equal(name, "27_Agenda");
-      return { getRange: range => {
-        assert.equal(range, "N42:N49");
-        return { getDisplayValues: () => names.map(value => [value]), getFormulas: () => [],
-          setValues: rows => { names = Array.from(rows, ([value]) => value); } };
-      } };
-    } }),
-  } });
+  const names = Array(8).fill("");
+  const drafts = { revision: 0, meetings: {}, bases: {}, fieldVersions: {} };
+  const sheet = { getRange: (row, column) => {
+    if (row === "N42:N49") return { getDisplayValues: () => names.map(value => [value]) };
+    assert.equal(column, 14);
+    return { getDisplayValue: () => names[row - 42], getFormula: () => "",
+      setValue: value => { names[row - 42] = value; } };
+  } };
+  let pendingWrites;
+  const context = vm.createContext({
+    drafts, agenda: sheet,
+    SpreadsheetApp: { flush() {}, openById: () => ({ getSheetByName: name => {
+      assert.equal(name, "27_Agenda"); return sheet;
+    } }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    Utilities: { formatDate: () => "2026-11-28" },
+    commit(draft, request, writes) { draft.revision++; pendingWrites = writes; return draft; },
+    rpc(path) {
+      if (path === "rpc/yttm_claim_sheet_job") return { id: 1, attempt: 1, writes: pendingWrites };
+      if (path === "rpc/yttm_finish_sheet_job") return true;
+      return [];
+    },
+  });
   vm.runInContext(backend, context);
-  vm.runInContext(`requirePin = pin => { if (pin !== "test PIN") throw new Error("Invalid PIN"); };
-    operationResponse = (request, result) => result;`, context);
-  const request = { year: "2027", pin: "test PIN", previousNames: names.slice(), names: ["New name", "", "", "", "", "", "", ""] };
-  assert.throws(() => context.saveTableTopicSpeakers({ ...request, pin: "wrong" }), /Invalid PIN/);
-  assert.equal(context.saveTableTopicSpeakers(request).ok, true);
-  assert.deepEqual(names, request.names);
-  assert.throws(() => context.saveTableTopicSpeakers({ ...request, names: ["Other", ...names.slice(1)] }), /changed in Google Sheets/);
+  vm.runInContext(`
+    primaryConfigured = () => true;
+    primaryRequest = rpc;
+    sheetContext = () => null;
+    readDrafts = () => drafts;
+    appendAudit = () => {};
+    writeDrafts = commit;
+    requirePin = pin => { if (pin !== "test PIN") throw new Error("Invalid PIN"); };
+    operationResponse = (request, result) => result;
+  `, context);
+  const post = request => context.doPost({ postData: { contents: JSON.stringify(request) } });
+  const meetingDate = "2027-01-01", section = "tableTopics", label = "Table Topics Speaker 8";
+  assert.equal(post({ action: "saveDraft", meetingDate, section, updates: { [label]: "Name" } }).ok, true);
+  assert.equal(drafts.meetings[meetingDate][section][label], "Name");
+  assert.equal(names[7], "");
+  const approval = { action: "applyDrafts", draftRevision: 1, selectionMode: "explicit", totalDrafts: 1,
+    selections: [{ meetingDate, section, label }] };
+  assert.match(post(approval).error, /Invalid PIN/);
+  assert.equal(names[7], "");
+  assert.equal(post({ ...approval, pin: "test PIN" }).applied, true);
+  assert.deepEqual(names, ["", "", "", "", "", "", "", "Name"]);
+  assert.deepEqual(drafts.meetings, {});
 });
 
 test("an approved batch routes identical column numbers to their own year's roles tab", () => {
