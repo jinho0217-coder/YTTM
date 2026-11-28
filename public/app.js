@@ -570,7 +570,7 @@ function detailedAgenda(model, meeting) {
     },
     {
       time: "11:00", title: "Table Topic Session", ownerRole: "Table Topic Master", owner: memberFor("Table Topic Master"),
-      tableTopicYear: sheetDateValue(meeting.date).slice(0, 4),
+      tableTopicDate: sheetDateValue(meeting.date),
       bullets: ["Conduct Table Topics Session", "Call for Timer's Report", "Recap Speakers and Give Reminder to Vote"],
     },
     {
@@ -639,10 +639,29 @@ function showAgendaDetails(item) {
   setText("agendaDialogTitle", item.title);
   document.getElementById("agendaDialogDetails").innerHTML = agendaDetailHtml(item);
   document.getElementById("agendaDetailsDialog").showModal();
-  if (item.tableTopicYear && WRITE_ENDPOINT) showTableTopicSpeakers(item.tableTopicYear);
+  if (item.tableTopicDate && WRITE_ENDPOINT) showTableTopicSpeakers(item.tableTopicDate);
 }
 
-function showTableTopicSpeakers(year) {
+function tableTopicAgendaSource(payload, year) {
+  if (year === "2027") return { date: payload.nextYearTableTopicDate, names: payload.nextYearTableTopicNames };
+  const rows = payload.agendaCsv ? parseCsv(payload.agendaCsv) : [];
+  if (rows[40]?.[13]?.trim() !== "Table Topic Speaker") return {};
+  return { date: rows[4]?.[6], names: Array.from({ length: 8 }, (_, index) => rows[41 + index]?.[13] || "") };
+}
+
+function tableTopicNamesForMeeting(meetingDate, source, drafts) {
+  const sourceDate = clean(source.date).replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, "$3-$1-$2");
+  const approved = drafts.tableTopicSpeakers?.[meetingDate];
+  const pending = drafts.meetings?.[meetingDate]?.tableTopics;
+  const hasSavedMeeting = Object.keys(drafts.tableTopicSpeakers || {}).some(date => date.slice(0, 4) === meetingDate.slice(0, 4));
+  return Array.from({ length: 8 }, (_, index) => {
+    const label = `Table Topics Speaker ${index + 1}`;
+    return pending?.[label] ?? approved?.[label] ?? (!hasSavedMeeting && sourceDate === meetingDate ? source.names?.[index] : "") ?? "";
+  });
+}
+
+function showTableTopicSpeakers(meetingDate) {
+  const year = meetingDate.slice(0, 4);
   const form = document.createElement("form");
   form.className = "table-topic-speaker-form";
   form.innerHTML = `<h3>Table Topics speakers</h3>
@@ -650,28 +669,23 @@ function showTableTopicSpeakers(year) {
     <p role="status" class="meeting-edit-status"></p>`;
   document.getElementById("agendaDialogDetails").appendChild(form);
   const status = form.querySelector("[role=status]");
-  const { agendaCsv, nextYearTableTopicNames } = state.sheetPayload || {};
-  const agendaRows = year === "2026" && agendaCsv ? parseCsv(agendaCsv) : null;
-  const sheetNames = agendaRows?.[40]?.[13] === "Table Topic Speaker"
-    ? Array.from({ length: 8 }, (_, index) => agendaRows[41 + index]?.[13] || "")
-    : year === "2027" ? nextYearTableTopicNames : null;
+  const source = tableTopicAgendaSource(state.sheetPayload || {}, year);
+  const sheetNames = source.names;
   if (!sheetNames || sheetNames.length !== 8) {
     status.textContent = "Speaker names are unavailable. Refresh the meeting schedule and try again.";
     return;
   }
   const drafts = state.sharedDrafts;
-  const meetingDate = `${year}-01-01`;
   const section = "tableTopics";
   const labels = sheetNames.map((_, index) => `Table Topics Speaker ${index + 1}`);
   const baseValues = Object.fromEntries(labels.map((label, index) => [label, sheetNames[index]]));
-  const draftValues = drafts.meetings?.[meetingDate]?.[section] || {};
-  let previousNames = labels.map(label => draftValues[label] ?? baseValues[label]);
+  let previousNames = tableTopicNamesForMeeting(meetingDate, source, drafts);
   const fieldVersions = Object.fromEntries(labels.map(label => [label, drafts.fieldVersions?.[`${meetingDate}|${section}|${label}`] || 0]));
-  form.querySelector(".table-topic-sheet-location").textContent = `${year.slice(2)}_Agenda · N42:N49 · One list for ${year}`;
+  form.querySelector(".table-topic-sheet-location").textContent = `${meetingDate} · ${year.slice(2)}_Agenda!N42:N49`;
   status.insertAdjacentHTML("beforebegin", `<fieldset class="table-topic-speaker-fields">
     <legend class="sr-only">Speaker names</legend>
     ${previousNames.map((name, index) => `<div class="meeting-edit-field"><label for="table-topic-speaker-${index}">Speaker ${index + 1}</label><input id="table-topic-speaker-${index}" data-speaker-name maxlength="100" value="${escapeHtml(name)}" autocomplete="off"></div>`).join("")}
-    <button type="submit" class="primary-button">Save speaker names</button>
+    <button type="submit" class="primary-button" ${canEditActiveMeeting() ? "" : "disabled"}>Save speaker names</button>
   </fieldset>`);
   status.textContent = "";
   const fields = form.querySelector("fieldset");
@@ -1062,7 +1076,7 @@ function openAdminApplyDialog() {
     <label class="admin-apply-item">
       <input type="checkbox" data-apply-change="${index}" checked>
       <span class="admin-apply-toggle" aria-hidden="true"></span>
-      <time>${escapeHtml(entry.section === "tableTopics" ? `${entry.meetingDate.slice(0, 4)} Agenda` : entry.meetingDate)}</time>
+      <time>${escapeHtml(entry.meetingDate)}</time>
       <strong>${escapeHtml(entry.section === "tableTopics" ? entry.label : `${entry.section} · ${entry.label}`)}</strong>
       <span class="admin-apply-value">${escapeHtml(entry.value || "(clear value)")}</span>
     </label>`).join("");
@@ -1715,6 +1729,11 @@ function renderSheetPayload(payload) {
   applyLocalSavesToRows(rolesRows);
   confirmDueAssignmentRows(rolesRows);
   state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
+  const agendaSources = Object.fromEntries(["2026", "2027"].map(year => [year, tableTopicAgendaSource(payload, year)]));
+  state.model.tableTopicNames = new Map(state.model.columns.map(meeting => {
+    const date = sheetDateValue(meeting.date);
+    return [meeting.col, tableTopicNamesForMeeting(date, agendaSources[date.slice(0, 4)] || {}, state.sharedDrafts)];
+  }));
   render(state.model, payload);
   renderDraftSyncState();
 }

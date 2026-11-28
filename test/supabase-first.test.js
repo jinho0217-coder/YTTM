@@ -95,7 +95,7 @@ test("Table Topics names save without a PIN and only reach the agenda after appr
   vm.runInContext(`
     primaryConfigured = () => true;
     primaryRequest = rpc;
-    sheetContext = () => null;
+    sheetContext = () => ({ columns: [{ date: "2027-01-03", column: 2 }] });
     readDrafts = () => drafts;
     appendAudit = () => {};
     writeDrafts = commit;
@@ -103,7 +103,7 @@ test("Table Topics names save without a PIN and only reach the agenda after appr
     operationResponse = (request, result) => result;
   `, context);
   const post = request => context.doPost({ postData: { contents: JSON.stringify(request) } });
-  const meetingDate = "2027-01-01", section = "tableTopics", label = "Table Topics Speaker 8";
+  const meetingDate = "2027-01-03", section = "tableTopics", label = "Table Topics Speaker 8";
   assert.equal(post({ action: "saveDraft", meetingDate, section, updates: { [label]: "Name" } }).ok, true);
   assert.equal(drafts.meetings[meetingDate][section][label], "Name");
   assert.equal(names[7], "");
@@ -114,6 +114,21 @@ test("Table Topics names save without a PIN and only reach the agenda after appr
   assert.equal(post({ ...approval, pin: "test PIN" }).applied, true);
   assert.deepEqual(names, ["", "", "", "", "", "", "", "Name"]);
   assert.deepEqual(drafts.meetings, {});
+  assert.equal(drafts.tableTopicSpeakers[meetingDate][label], "Name");
+});
+
+test("Table Topics speakers add only attendees not already counted through a role or the attendee list", () => {
+  const context = dashboard();
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../public/meeting-people.js"), "utf8"), context);
+  const model = { rowsByLabel: new Map([
+    ["General Evaluator", { row: ["General Evaluator", "Joy"] }],
+    ["Ah Counter", { row: ["Ah Counter", "Sam"] }],
+    ["Attendees", { row: ["Attendees", JSON.stringify([{ name: "Lee", guest: false }])] }],
+  ]), tableTopicNames: new Map([[1, ["joy", "Sam", "Lee", "New Name", "New Name"]]]) };
+  const attendees = context.meetingAttendees(model, { col: 1 });
+  assert.deepEqual(Array.from(attendees, person => person.name), ["Joy", "Lee", "New Name", "Sam"]);
+  assert.equal(attendees.find(person => person.name === "Joy").roles.length, 2);
+  assert.equal(context.meetingAttendees(model, { col: 2 }).length, 0);
 });
 
 test("an approved batch routes identical column numbers to their own year's roles tab", () => {

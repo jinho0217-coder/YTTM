@@ -92,6 +92,16 @@ function meetingAttendees(model, meeting, { includeTentative = false } = {}) {
     if (hasGuestSuffix(row[meeting.col])) people.get(key).guest = true;
     people.get(key).roles.push({ label, tentative: isTentative(row[meeting.col]) });
   });
+  for (const rawName of model.tableTopicNames?.get(meeting.col) || []) {
+    const name = normalizeName(rawName);
+    if (!name) continue;
+    const key = name.toLocaleLowerCase();
+    if (!people.has(key)) people.set(key, { name, guest: hasGuestSuffix(rawName), manual: false, roles: [] });
+    const person = people.get(key);
+    if (!person.roles.some(role => role.label === "Table Topics Speaker")) {
+      person.roles.push({ label: "Table Topics Speaker", tentative: false });
+    }
+  }
   return [...people.values()].filter(person => includeTentative || person.roles.length || !tentativeNames.has(person.name.toLocaleLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
 }
 function renderAttendees() {

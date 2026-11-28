@@ -62,6 +62,7 @@ function readSheetPayload() {
     ok: true,
     nextYearRolesCsv: nextRoles ? sheetCsv(nextRoles) : null,
     nextYearTableTopicNames: nextAgenda?.getRange("N42:N49").getDisplayValues().map(([name]) => name) || null,
+    nextYearTableTopicDate: nextAgenda?.getRange("G5").getDisplayValue() || "",
     rolesCsv: sheetCsv(roles),
     agendaCsv: sheetCsv(agenda),
     fetchedAt: new Date().toISOString(),
@@ -438,10 +439,16 @@ function sheetLiteral(value) {
   return /^[=']/.test(value) ? "'" + value : value;
 }
 
+function recordApprovedTableTopics(drafts, writes) {
+  writes.filter(item => item.section === "tableTopics").forEach(({ meetingDate, label, value }) => {
+    const meetings = drafts.tableTopicSpeakers ||= {};
+    (meetings[meetingDate] ||= {})[label] = value;
+  });
+}
+
 function draftSheetTarget(meetings, date, section, agendaTargets = new Map()) {
   if (section !== "tableTopics") return meetings.find(entry => entry.date === date);
-  // The eight Agenda slots are shared by all meetings in the same year.
-  if (!/^(2026|2027)-01-01$/.test(date)) throw new Error("Invalid agenda draft date.");
+  if (!/^(2026|2027)-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid agenda draft date.");
   if (!agendaTargets.has(date)) {
     const { sheet, range } = tableTopicSpeakerRange(date.slice(0, 4));
     const values = [];
@@ -592,9 +599,8 @@ function doPost(event) {
     contexts.forEach(context => confirmDueAssignments(context, readDrafts(), today));
 
     if (request.action === "saveDraft") {
-      const target = request.section === "tableTopics"
-        ? draftSheetTarget(meetings, saveDate, request.section)
-        : requireAllowedMeeting({ allowedMeetings }, request.meetingDate);
+      const allowed = requireAllowedMeeting({ allowedMeetings }, request.meetingDate);
+      const target = request.section === "tableTopics" ? draftSheetTarget(meetings, allowed.date, request.section) : allowed;
       const { context } = target;
       const updates = validatedUpdates(request.section, request.updates);
       Object.keys(updates).forEach(label => { updates[label] = confirmedValueOnDate(label, updates[label], target.date, today); });
@@ -635,12 +641,13 @@ function doPost(event) {
         const row = context.rowByLabel.get(label);
         if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
         const sheetValue = sheetValues[label];
-        if (value === sheetValue) delete sectionDraft[label];
+        const approvedValue = request.section === "tableTopics" ? drafts.tableTopicSpeakers?.[target.date]?.[label] : sheetValue;
+        if (value === approvedValue) delete sectionDraft[label];
         else {
           sectionDraft[label] = value;
           if (!Object.prototype.hasOwnProperty.call(drafts.bases[target.date][request.section], label)) drafts.bases[target.date][request.section][label] = sheetValue;
         }
-        if (value === sheetValue) delete drafts.bases[target.date][request.section][label];
+        if (value === approvedValue) delete drafts.bases[target.date][request.section][label];
         const key = fieldKey(target.date, request.section, label);
         drafts.fieldVersions[key] = Number(drafts.fieldVersions[key] || 0) + 1;
       });
@@ -709,8 +716,13 @@ function doPost(event) {
         return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed after the shared draft was created.", conflicts });
       }
       if (!writes.length) throw new Error("Select at least one pending change to apply.");
+      const topicDates = new Set(writes.filter(item => item.section === "tableTopics").map(item => item.meetingDate));
+      if (topicDates.size > new Set([...topicDates].map(date => date.slice(0, 4))).size) {
+        throw new Error("Approve Table Topics speaker names for one meeting per agenda tab at a time.");
+      }
       if (primaryConfigured()) {
         removeApprovedDraftFields(drafts, writes);
+        recordApprovedTableTopics(drafts, writes);
         const saved = writeDrafts(drafts, request, writes);
         let syncPending = true;
         try {
@@ -720,11 +732,12 @@ function doPost(event) {
         catch (error) { console.error("Sheet sync queued for retry.", error); }
         return operationResponse(request, { ok: true, applied: true, syncPending, revision: saved.revision, updated: writes.length, remaining: allEntries.length - writes.length });
       }
-      const sheetsByDate = new Map([...meetings, ...agendaTargets.values()].map(target => [target.date, target.context]));
+      const sheetsByDate = new Map(meetings.map(target => [target.date, target.context]));
+      const contextFor = item => item.section === "tableTopics" ? agendaTargets.get(item.meetingDate).context : sheetsByDate.get(item.meetingDate);
       let completed = 0;
       try {
         writes.forEach(item => {
-          const context = sheetsByDate.get(item.meetingDate);
+          const context = contextFor(item);
           if (!item.row && item.label === "Attendees") {
             let row = context.rowByLabel.get("Attendees");
             if (!row) {
@@ -742,12 +755,13 @@ function doPost(event) {
       } catch (writeError) {
         for (let index = completed - 1; index >= 0; index -= 1) {
           const item = writes[index];
-          try { sheetsByDate.get(item.meetingDate).sheet.getRange(item.row, item.column).setValue(item.previousValue); } catch (_) {}
+          try { contextFor(item).sheet.getRange(item.row, item.column).setValue(item.section === "tableTopics" ? sheetLiteral(item.previousValue) : item.previousValue); } catch (_) {}
         }
         SpreadsheetApp.flush();
         throw new Error(`Google Sheets was only partially updated, so the operation was rolled back. ${writeError.message || writeError}`);
       }
       removeApprovedDraftFields(drafts, writes);
+      recordApprovedTableTopics(drafts, writes);
       const saved = writeDrafts(drafts);
       try {
         appendAudit(writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })));
