@@ -133,11 +133,15 @@ a { color: inherit; }
 .dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
 @media (min-width: 621px) {
   .dashboard-tabs { align-items: center; }
+  .dashboard-tabs button,
   .dashboard-tabs .meeting-arrow {
-    flex-basis: 64px;
-    min-width: 64px;
+    flex: 0 0 140px;
+    min-width: 140px;
     min-height: 48px;
+  }
+  .dashboard-tabs .meeting-arrow {
     padding-inline: 0;
+    border-color: var(--red);
     font-size: 28px;
   }
 }
