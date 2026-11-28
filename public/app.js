@@ -959,10 +959,12 @@ async function applySharedDrafts(event) {
       totalDrafts: state.adminApplyEntries?.length || 0,
       draftRevision: state.sharedDrafts.revision,
     });
-    status.className = "meeting-edit-status success";
-    status.textContent = `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
+    status.className = result.syncPending ? "meeting-edit-status warning" : "meeting-edit-status success";
+    status.textContent = result.syncPending
+      ? "Saved to Supabase. Google Sheets sync is still pending."
+      : `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
     await loadDashboard(true);
-    setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
+    if (!result.syncPending) setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
   } catch (error) {
     if (error.result?.code === "DRAFT_CHANGED") {
       status.className = "meeting-edit-status warning";

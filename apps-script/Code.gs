@@ -3,6 +3,7 @@ const ROLES_SHEET = "26_Roles";
 const AGENDA_SHEET = "26_Agenda";
 const TIME_ZONE = "Asia/Seoul";
 const DRAFTS_PROPERTY = "YTTM_SHARED_DRAFTS";
+const DRAFTS_MANIFEST_PROPERTY = DRAFTS_PROPERTY + "_MANIFEST";
 const AUDIT_PROPERTY = "YTTM_CHANGE_AUDIT";
 const PIN_GUARD_PROPERTY = "YTTM_PIN_GUARD";
 const ADMIN_PIN_PROPERTY = "YTTM_ADMIN_PIN";
@@ -67,9 +68,19 @@ function readSheetPayload() {
 function operationResponse(request, payload) {
   const requestId = String(request?.requestId || "");
   if (/^[A-Za-z0-9_-]{8,80}$/.test(requestId)) {
-    CacheService.getScriptCache().put(`YTTM_OPERATION_${requestId}`, JSON.stringify(payload), 600);
+    // A draft snapshot can exceed the cache value limit. Store only the receipt.
+    const receipt = payload.ok && payload.draft
+      ? { ok: true, draft: true, revision: payload.revision, updated: payload.updated }
+      : payload;
+    CacheService.getScriptCache().put(`YTTM_OPERATION_${requestId}`, JSON.stringify(receipt), 600);
   }
   return jsonResponse(payload);
+}
+
+function attachCurrentDrafts(result) {
+  if (!result.ok || !result.draft) return result;
+  const drafts = readDrafts();
+  return { ...result, revision: drafts.revision, fieldVersions: drafts.fieldVersions, drafts };
 }
 
 function normalizedDate(value) {
@@ -138,14 +149,7 @@ function confirmDueAssignments(context, drafts, today) {
         writes.push({ row, column: column.column, original, value: confirmed });
         if (drafts.bases[column.date]?.[section]?.[label] === original) drafts.bases[column.date][section][label] = confirmed;
       }
-      if (updates && draftValue !== undefined) {
-        if (nextDraft === confirmed) {
-          delete updates[label];
-          if (drafts.bases[column.date]?.[section]) delete drafts.bases[column.date][section][label];
-        } else updates[label] = nextDraft;
-        if (!Object.keys(updates).length) delete drafts.meetings[column.date][section];
-        if (!Object.keys(drafts.meetings[column.date]).length) delete drafts.meetings[column.date];
-      }
+      if (draftValue !== undefined) updates[label] = nextDraft;
       const key = fieldKey(column.date, section, label);
       drafts.fieldVersions[key] = Number(drafts.fieldVersions[key] || 0) + 1;
       audit.push({ at: new Date().toISOString(), action: "auto-confirm", meetingDate: column.date, section, label, value: nextDraft ?? confirmed });
@@ -189,30 +193,156 @@ function emptyDrafts() {
   return { revision: 0, updatedAt: "", meetings: {}, locks: {}, bases: {}, fieldVersions: {} };
 }
 
-function readDrafts() {
-  const raw = PropertiesService.getScriptProperties().getProperty(DRAFTS_PROPERTY);
-  if (!raw) return emptyDrafts();
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.meetings) return emptyDrafts();
-    // Retire cooldowns saved by previous deployments.
-    parsed.locks = {};
-    parsed.bases = parsed.bases || {};
-    parsed.fieldVersions = parsed.fieldVersions || {};
-    return parsed;
-  } catch (_) {
-    return emptyDrafts();
+function primaryConfigured() {
+  return Boolean(PropertiesService.getScriptProperties().getProperty("YTTM_SUPABASE_KEY"));
+}
+
+function primaryRequest(path, body) {
+  const key = PropertiesService.getScriptProperties().getProperty("YTTM_SUPABASE_KEY");
+  if (!key || !key.startsWith("sb_secret_")) throw new Error("Set YTTM_SUPABASE_KEY to a Supabase secret key.");
+  const options = { headers: { apikey: key }, muteHttpExceptions: true };
+  if (body !== undefined) {
+    options.method = "post";
+    options.contentType = "application/json";
+    options.payload = JSON.stringify(body);
+  }
+  const response = UrlFetchApp.fetch("https://zyiosfhyjwkmfprhmdem.supabase.co/rest/v1/" + path, options);
+  if (response.getResponseCode() >= 300) throw new Error("Supabase request failed (" + response.getResponseCode() + ").");
+  return JSON.parse(response.getContentText());
+}
+
+// Install this trigger from the editor using the account that owns the web app.
+function installPrimarySheetSync() {
+  if (!primaryConfigured()) throw new Error("Set the Supabase key in Script Properties first.");
+  if (!ScriptApp.getProjectTriggers().some(trigger => trigger.getHandlerFunction() === "retryPrimarySheetSync")) {
+    ScriptApp.newTrigger("retryPrimarySheetSync").timeBased().everyMinutes(1).create();
   }
 }
 
-function writeDrafts(drafts) {
+function retryPrimarySheetSync() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;
+  try { syncPrimarySheetJob(); }
+  finally { lock.releaseLock(); }
+}
+
+function syncPrimarySheetJob() {
+  const job = primaryRequest("rpc/yttm_claim_sheet_job", {});
+  if (!job) return false;
+  try {
+    const context = sheetContext();
+    const targets = job.writes.map(item => {
+      const column = context.columns.find(entry => entry.date === item.meetingDate)?.column;
+      const row = context.rowByLabel.get(item.label);
+      if (!column || (!row && item.label !== "Attendees")) throw new Error("Sheet layout changed.");
+      const current = row ? String(context.values[row - 1]?.[column - 1] ?? "").trim() : "";
+      if (!job.force && current !== item.previousValue && current !== item.value) {
+        throw new Error("Google Sheets changed after approval. Restore or reconcile the affected cell before retry.");
+      }
+      return { ...item, row, column, current };
+    });
+    targets.forEach(item => {
+      if (item.current === item.value) return;
+      let row = item.row || context.rowByLabel.get(item.label);
+      if (!row) {
+        row = context.sheet.getLastRow() + 1;
+        if (row > context.sheet.getMaxRows()) context.sheet.insertRowsAfter(context.sheet.getMaxRows(), 1);
+        context.sheet.getRange(row, 1).setValue(item.label);
+        context.rowByLabel.set(item.label, row);
+      }
+      context.sheet.getRange(row, item.column).setValue(item.value.startsWith("=") ? "'" + item.value : item.value);
+    });
+    SpreadsheetApp.flush();
+    return primaryRequest("rpc/yttm_finish_sheet_job", { p_id: job.id, p_attempt: job.attempt });
+  } catch (error) {
+    primaryRequest("rpc/yttm_finish_sheet_job", { p_id: job.id, p_attempt: job.attempt, p_error: error.message });
+    return false;
+  }
+}
+
+function readDrafts() {
+  if (primaryConfigured()) {
+    const [stored] = primaryRequest("yttm_primary_state?id=eq.true&select=payload");
+    if (stored) return stored.payload;
+  }
+  const properties = PropertiesService.getScriptProperties().getProperties();
+  let raw = properties[DRAFTS_PROPERTY];
+  if (properties[DRAFTS_MANIFEST_PROPERTY]) {
+    const { slot, count } = JSON.parse(properties[DRAFTS_MANIFEST_PROPERTY]);
+    if (![0, 1].includes(slot) || !Number.isInteger(count) || count < 1 || count > 100) {
+      throw new Error("The shared draft storage manifest is invalid.");
+    }
+    const chunks = Array.from({ length: count }, (_, index) => properties[draftChunkKey(slot, index)]);
+    if (chunks.some(chunk => typeof chunk !== "string" || !chunk.length)) {
+      throw new Error("The shared draft storage is incomplete.");
+    }
+    raw = chunks.join("");
+  }
+  if (!raw) return emptyDrafts();
+  const parsed = JSON.parse(raw);
+  if (!parsed?.meetings) throw new Error("The shared draft storage is invalid.");
+  // Retire cooldowns saved by previous deployments.
+  parsed.locks = {};
+  parsed.bases = parsed.bases || {};
+  parsed.fieldVersions = parsed.fieldVersions || {};
+  return parsed;
+}
+
+function draftChunkKey(slot, index) {
+  return `${DRAFTS_PROPERTY}_${slot}_${index}`;
+}
+
+function writeDrafts(drafts, request, writes) {
+  const revision = Number(drafts.revision || 0);
   drafts.revision = Number(drafts.revision || 0) + 1;
   drafts.updatedAt = new Date().toISOString();
+  if (primaryConfigured()) {
+    const [stored] = primaryRequest("yttm_primary_state?id=eq.true&select=revision,payload");
+    if (stored && Number(stored.payload.revision) !== revision) throw new Error("The shared draft changed. Refresh and retry.");
+    const receipt = primaryRequest("rpc/yttm_commit_primary", {
+      p_expected: stored ? stored.revision : -1,
+      p_payload: drafts,
+      p_request_id: request?.requestId || Utilities.getUuid(),
+      p_fingerprint: JSON.stringify([request?.action, request?.meetingDate, request?.section, request?.updates, writes]),
+      p_result: { ok: true, applied: Boolean(writes), revision: drafts.revision, updated: writes?.length || Object.keys(request?.updates || {}).length },
+      p_writes: writes || null,
+      p_force: request?.force === true,
+    });
+    if (receipt.retry) throw new Error("The shared draft changed. Refresh and retry.");
+    return drafts;
+  }
   const serialized = JSON.stringify(drafts);
-  if (Utilities.newBlob(serialized).getBytes().length > 8800) {
+  if (Utilities.newBlob(serialized).getBytes().length > 180000) {
     throw new Error("The shared draft is full. Ask an administrator to apply the pending changes before adding more.");
   }
-  PropertiesService.getScriptProperties().setProperty(DRAFTS_PROPERTY, serialized);
+  const properties = PropertiesService.getScriptProperties();
+  const stored = properties.getProperties();
+  const manifest = JSON.parse(stored[DRAFTS_MANIFEST_PROPERTY] || "null");
+  const slot = manifest?.slot === 0 ? 1 : 0;
+  const chunks = {};
+  let count = 0;
+  for (let start = 0; start < serialized.length;) {
+    let end = Math.min(start + 2000, serialized.length);
+    // Keep each value under the byte limit and keep surrogate pairs together.
+    if (end < serialized.length && /[\uD800-\uDBFF]/.test(serialized[end - 1])) end -= 1;
+    chunks[draftChunkKey(slot, count++)] = serialized.slice(start, end);
+    start = end;
+  }
+  // Publish only after every chunk is written. An interrupted write leaves
+  // the previous snapshot readable, including the legacy single-property one.
+  properties.setProperties(chunks);
+  properties.setProperty(DRAFTS_MANIFEST_PROPERTY, JSON.stringify({ slot, count }));
+  // Retire the previous snapshot after publication, especially after approval
+  // clears the draft. Leave unrelated script properties intact.
+  const obsolete = Object.fromEntries(Object.keys(stored)
+    .filter(key => stored[key] && (key === DRAFTS_PROPERTY ||
+      (/^YTTM_SHARED_DRAFTS_[01]_\d+$/.test(key) && !Object.hasOwn(chunks, key))))
+    .map(key => [key, ""]));
+  try {
+    if (Object.keys(obsolete).length) properties.setProperties(obsolete);
+  } catch (error) {
+    console.error("Unable to clear previous draft chunks.", error);
+  }
   return drafts;
 }
 
@@ -293,6 +423,14 @@ function requirePin(pin) {
 function doGet(event) {
   const action = String(event?.parameter?.action || "getDrafts");
   const callback = String(event?.parameter?.callback || "");
+  if (action === "storageHealth") {
+    try {
+      const state = primaryRequest("yttm_primary_state?select=revision&limit=1");
+      return webResponse({ ok: Array.isArray(state), storage: "Supabase" }, callback);
+    } catch (error) {
+      return webResponse({ ok: false, storage: "Supabase" }, callback);
+    }
+  }
   if (action === "getSheets") {
     try {
       refreshAutomaticConfirmations();
@@ -304,10 +442,19 @@ function doGet(event) {
   if (action === "status") {
     const requestId = String(event?.parameter?.requestId || "");
     const raw = /^[A-Za-z0-9_-]{8,80}$/.test(requestId) ? CacheService.getScriptCache().get(`YTTM_OPERATION_${requestId}`) : "";
-    return webResponse(raw ? JSON.parse(raw) : { ok: false, pending: true }, callback);
+    const result = raw ? JSON.parse(raw) : { ok: false, pending: true };
+    try {
+      return webResponse(attachCurrentDrafts(result), callback);
+    } catch (error) {
+      return webResponse({ ok: false, error: error.message || String(error) }, callback);
+    }
   }
   try {
-    refreshAutomaticConfirmations();
+    try {
+      refreshAutomaticConfirmations();
+    } catch (error) {
+      console.error("Unable to refresh automatic confirmations.", error);
+    }
     return webResponse({ ok: true, drafts: readDrafts() }, callback);
   } catch (error) {
     return webResponse({ ok: false, error: error.message || String(error) }, callback);
@@ -320,11 +467,22 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    if (primaryConfigured() && ["saveDraft", "applyDrafts"].includes(request.action) &&
+        /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
+      const [receipt] = primaryRequest("yttm_save_receipts?request_id=eq." + request.requestId + "&select=result");
+      if (receipt) {
+        if (request.action === "applyDrafts") requirePin(request.pin);
+        return operationResponse(request, { ...receipt.result, draft: request.action === "saveDraft", drafts: readDrafts() });
+      }
+    }
     // Reloads and retries reuse the same ID: acknowledge an already committed
     // draft without writing it twice or creating a false version conflict.
     if (request.action === "saveDraft" && /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
       const previous = CacheService.getScriptCache().get(`YTTM_OPERATION_${request.requestId}`);
-      if (previous && JSON.parse(previous).ok) return jsonResponse(JSON.parse(previous));
+      if (previous) {
+        const result = JSON.parse(previous);
+        if (result.ok) return jsonResponse(attachCurrentDrafts(result));
+      }
     }
     const context = sheetContext();
     const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
@@ -361,15 +519,6 @@ function doPost(event) {
         }
       });
       if (sheetConflicts.length) {
-        sheetConflicts.forEach(label => {
-          if (drafts.meetings?.[target.date]?.[request.section]) delete drafts.meetings[target.date][request.section][label];
-          if (drafts.bases?.[target.date]?.[request.section]) delete drafts.bases[target.date][request.section][label];
-          const key = fieldKey(target.date, request.section, label);
-          drafts.fieldVersions[key] = Number(drafts.fieldVersions[key] || 0) + 1;
-        });
-        if (drafts.meetings?.[target.date]?.[request.section] && !Object.keys(drafts.meetings[target.date][request.section]).length) delete drafts.meetings[target.date][request.section];
-        if (drafts.meetings?.[target.date] && !Object.keys(drafts.meetings[target.date]).length) delete drafts.meetings[target.date];
-        writeDrafts(drafts);
         return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed first. Reload the latest sheet data, review it and edit again.", conflicts: sheetConflicts, sheetValues });
       }
       if (!drafts.meetings[target.date]) drafts.meetings[target.date] = {};
@@ -392,8 +541,12 @@ function doPost(event) {
       if (Object.keys(sectionDraft).length) drafts.meetings[target.date][request.section] = sectionDraft;
       else delete drafts.meetings[target.date][request.section];
       if (!Object.keys(drafts.meetings[target.date]).length) delete drafts.meetings[target.date];
-      const saved = writeDrafts(drafts);
-      appendAudit(Object.entries(updates).map(([label, value]) => ({ at: new Date().toISOString(), action: "draft", meetingDate: target.date, section: request.section, label, value, revision: saved.fieldVersions[fieldKey(target.date, request.section, label)] })));
+      const saved = writeDrafts(drafts, request);
+      try {
+        appendAudit(Object.entries(updates).map(([label, value]) => ({ at: new Date().toISOString(), action: "draft", meetingDate: target.date, section: request.section, label, value, revision: saved.fieldVersions[fieldKey(target.date, request.section, label)] })));
+      } catch (error) {
+        console.error("Unable to record the committed draft in the audit log.", error);
+      }
       return operationResponse(request, { ok: true, draft: true, revision: saved.revision, fieldVersions: saved.fieldVersions, drafts: saved, updated: Object.keys(updates).length });
     }
 
@@ -417,13 +570,14 @@ function doPost(event) {
         throw new Error("The selected change list is invalid. No changes were applied.");
       }
       Object.entries(drafts.meetings || {}).forEach(([meetingDate, sections]) => {
-        const target = requireAllowedMeeting(context, meetingDate);
         Object.entries(sections || {}).forEach(([section, rawUpdates]) => {
           const updates = validatedUpdates(section, rawUpdates);
           Object.keys(updates).forEach(label => {
             const key = fieldKey(meetingDate, section, label);
             allEntries.push({ meetingDate, section, label, value: updates[label] });
             if (!selectedKeys.has(key)) return;
+            const target = context.columns.find(column => column.date === meetingDate);
+            if (!target) throw new Error("The selected meeting date was not found in Google Sheets.");
             const row = context.rowByLabel.get(label);
             if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
             const currentValue = row ? String(context.sheet.getRange(row, target.column).getValue() ?? "").trim() : "";
@@ -438,6 +592,21 @@ function doPost(event) {
       }
       if (conflicts.length && request.force !== true) {
         return operationResponse(request, { ok: false, code: "SHEET_CHANGED", error: "Google Sheets changed after the shared draft was created.", conflicts });
+      }
+      if (!writes.length) throw new Error("Select at least one pending change to apply.");
+      if (primaryConfigured()) {
+        writes.forEach(({ meetingDate, section, label }) => {
+          delete drafts.meetings[meetingDate][section][label];
+          if (drafts.bases?.[meetingDate]?.[section]) delete drafts.bases[meetingDate][section][label];
+        });
+        const saved = writeDrafts(drafts, request, writes);
+        let syncPending = true;
+        try {
+          syncPrimarySheetJob();
+          syncPending = primaryRequest("yttm_sheet_outbox?state=neq.done&select=id&limit=1").length > 0;
+        }
+        catch (error) { console.error("Sheet sync queued for retry.", error); }
+        return operationResponse(request, { ok: true, applied: true, syncPending, revision: saved.revision, updated: writes.length, remaining: allEntries.length - writes.length });
       }
       let completed = 0;
       try {
@@ -463,17 +632,22 @@ function doPost(event) {
         SpreadsheetApp.flush();
         throw new Error(`Google Sheets was only partially updated, so the operation was rolled back. ${writeError.message || writeError}`);
       }
-      drafts.meetings = {};
-      drafts.bases = {};
-      drafts.locks = {};
+      writes.forEach(({ meetingDate, section, label }) => {
+        for (const entries of [drafts.meetings, drafts.bases]) {
+          const meeting = entries[meetingDate];
+          if (!meeting?.[section]) continue;
+          delete meeting[section][label];
+          if (!Object.keys(meeting[section]).length) delete meeting[section];
+          if (!Object.keys(meeting).length) delete entries[meetingDate];
+        }
+      });
       const saved = writeDrafts(drafts);
-      const appliedKeys = new Set(writes.map(item => fieldKey(item.meetingDate, item.section, item.label)));
-      const discarded = allEntries.filter(item => !appliedKeys.has(fieldKey(item.meetingDate, item.section, item.label)));
-      appendAudit([
-        ...writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })),
-        ...discarded.map(item => ({ at: new Date().toISOString(), action: "discard", meetingDate: item.meetingDate, section: item.section, label: item.label, value: item.value })),
-      ]);
-      return operationResponse(request, { ok: true, applied: true, revision: saved.revision, updated: writes.length, discarded: discarded.length });
+      try {
+        appendAudit(writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })));
+      } catch (error) {
+        console.error("Unable to record the applied drafts in the audit log.", error);
+      }
+      return operationResponse(request, { ok: true, applied: true, revision: saved.revision, updated: writes.length, remaining: allEntries.length - writes.length });
     }
 
     if (request.action === "changePin") {
