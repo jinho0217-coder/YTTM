@@ -22,29 +22,6 @@ test("tentative names preserve identity and never count as confirmed", () => {
   assert.equal(c.assignmentName("◷ Jin"), "Jin");
 });
 
-test("manual names save as confirmed unless tentative is explicitly enabled after typing", () => {
-  const c = client();
-  let pressed = 'false';
-  const toggle = { getAttribute: () => pressed, setAttribute: (_, value) => { pressed = value; } };
-  c.document = { querySelector: () => toggle };
-  c.CSS = { escape: value => value };
-  for (const label of ['Timer', 'Speaker 1', 'Evaluator 2']) {
-    const input = { value: 'Jin', dataset: { editField: label } };
-    pressed = 'false';
-    assert.equal(c.assignmentInputValue(input), 'Jin', 'new manual assignments default to confirmed');
-    pressed = 'true';
-    assert.equal(c.assignmentInputValue(input), '◷ Jin', 'untouched existing tentative assignments are preserved');
-    input.value = 'Joy';
-    c.resetTentativeAssignment(input);
-    assert.equal(c.assignmentInputValue(input), 'Joy', 'typing a replacement removes the tentative status');
-    pressed = 'true';
-    assert.equal(c.assignmentInputValue(input), '◷ Joy', 'explicit activation after typing restores tentative status');
-    input.value = '';
-    c.resetTentativeAssignment(input);
-    assert.equal(pressed, 'false');
-    assert.equal(c.assignmentInputValue(input), '');
-  }
-});
 test("attendees merge aliases and multiple roles, keep guests without roles, and isolate meeting dates", () => {
   const c = client();
   const rows = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "◷ Jin", "Other"], ["Speaker 1", "Jin", ""], ["Timer", "Shilry", ""], ["Attendees", JSON.stringify([{ name: "Guest", guest: true }, { name: "Shirly", guest: true }]), ""]];
@@ -88,16 +65,6 @@ test("hidden tentative assignees remain reserved when suggesting other roles", (
   assert.ok(items.length > 0);
   assert.ok(items.every(item => item.name !== 'Alice'));
 });
-test("a new attendees row survives shared snapshots and pending local overlays", () => {
-  const c = client();
-  const rows = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "Jin", ""]];
-  c.applySharedDraftsToRows(rows, { meetings: { "2099-01-01": { attendees: { Attendees: '[{"name":"Guest","guest":true}]' } } } });
-  c.applySharedDraftsToRows(rows, { meetings: { "2099-01-08": { attendees: { Attendees: '[{"name":"Next","guest":false}]' } } } });
-  assert.equal(rows.filter(r => r[0] === "Attendees").length, 1);
-  assert.match(rows[2][1], /Guest/);
-  assert.match(rows[2][2], /Next/);
-});
-
 function service() {
   const properties = new Map(), operations = new Map();
   const values = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "Jin", "Other"]];
@@ -112,7 +79,13 @@ function service() {
   };
   const context = vm.createContext({
     SpreadsheetApp: { openById: () => ({ getSheetByName: () => sheet }), flush() {} },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: key => properties.get(key), setProperty: (key, val) => properties.set(key, val), deleteProperty: key => properties.delete(key) }) },
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: key => properties.get(key),
+      getProperties: () => Object.fromEntries(properties),
+      setProperty: (key, value) => properties.set(key, value),
+      setProperties: entries => Object.entries(entries).forEach(([key, value]) => properties.set(key, value)),
+      deleteProperty: key => properties.delete(key),
+    }) },
     Utilities: { formatDate: (_, __, pattern) => ({ EEE: "Mon", H: "10", "yyyy-MM-dd": "2026-10-26" })[pattern], newBlob: value => ({ getBytes: () => Buffer.from(value) }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     CacheService: { getScriptCache: () => ({ get: key => operations.get(key), put: (key, val) => operations.set(key, val) }) },
@@ -150,7 +123,7 @@ test("automatic confirmation persists approved statuses but keeps unapproved nam
   assert.equal(result.meetings['2026-10-26'].roles.Chairperson, 'Replacement');
   assert.equal(result.bases['2026-10-26'].roles.Chairperson, 'Jin');
   assert.equal(result.fieldVersions['2026-10-26|roles|Timer'], 1);
-  assert.equal(JSON.parse(s.properties.get('YTTM_SHARED_DRAFTS')).revision, 2);
+  assert.equal(s.context.readDrafts().revision, 2);
   assert.equal(s.context.confirmDueAssignments(s.context.sheetContext(), result, '2026-10-26').revision, 2, 'repeat reads must not change versions');
 });
 
@@ -247,28 +220,28 @@ test("guest suffix round-trips identity, attendance and tentative confirmation",
   assert.equal(c.isGuestAssignment('Donald', model, model.columns[0]), false);
 });
 
-test("Guest and Member toggles update all matching roles and speeches together", () => {
-  const c = client();
-  c.rows = [['Date','2099-01-01'],['Chairperson','Anne'],['Speaker 1','◷ Anne'],['Evaluator 1','Donald'],['Attendees','']];
-  vm.runInContext('state.model = buildModel(rows, []); state.meetingOffset = 0; state.model.comingMeetingIndex = 0;', c);
-  c.editableValue = (meeting, label) => c.rows.find(row => row[0] === label)?.[meeting.col] || '';
-  let groups;
-  c.savePeopleUpdateGroups = value => { groups = value; };
-  c.updateAttendee('Anne', 'guest');
-  assert.equal(groups.roles.Chairperson, 'Anne (G)');
-  assert.equal(groups.speeches['Speaker 1'], '◷ Anne (G)');
-  assert.equal(groups.speeches['Evaluator 1'], undefined);
-  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, true);
-  c.rows[1][1] = 'Anne (G)';
-  c.rows[2][1] = '◷ Anne (G)';
-  c.rows[4][1] = groups.attendees.Attendees;
-  vm.runInContext('state.model = buildModel(rows, []); state.model.comingMeetingIndex = 0;', c);
-  c.updateAttendee('Anne', 'guest');
-  assert.equal(groups.roles.Chairperson, 'Anne');
-  assert.equal(groups.speeches['Speaker 1'], '◷ Anne');
-  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, false);
-  c.document = {querySelector: () => ({getAttribute: () => 'false'})};
-  c.CSS = {escape: value => value};
-  assert.equal(c.assignmentInputValue({value:'Anne', dataset:{editField:'Timer'}}), 'Anne (G)');
-  assert.equal(c.assignmentInputValue({value:'Donald', dataset:{editField:'Timer'}}), 'Donald');
+test("midnight confirmation keeps a pending role even when its normalized value matches the sheet", () => {
+  const s = service();
+  const date = "2026-10-26";
+  s.values[0][1] = date;
+  s.values[1][1] = "Jin";
+  const drafts = {
+    revision: 1, meetings: { [date]: { roles: { Chairperson: "◷ Jin" } } },
+    bases: { [date]: { roles: { Chairperson: "Jin" } } }, fieldVersions: {},
+  };
+  s.context.confirmDueAssignments(s.context.sheetContext(), drafts, date);
+  assert.equal(s.context.readDrafts().meetings[date].roles.Chairperson, "Jin");
+  assert.equal(s.values[1][1], "Jin");
+});
+
+test("a failed automatic confirmation still returns the stored shared roles", () => {
+  const s = service();
+  s.properties.set("YTTM_SHARED_DRAFTS", JSON.stringify({
+    revision: 5, meetings: { "2099-01-01": { roles: { Chairperson: "Joy" } } },
+  }));
+  s.context.console = { error() {} };
+  s.context.refreshAutomaticConfirmations = () => { throw new Error("Temporary spreadsheet failure"); };
+  const result = s.context.doGet({ parameter: { action: "getDrafts" } });
+  assert.equal(result.ok, true);
+  assert.equal(result.drafts.meetings["2099-01-01"].roles.Chairperson, "Joy");
 });

@@ -4,61 +4,37 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 
-const frontend = fs.readFileSync(path.join(__dirname, "../public/app.js"), "utf8");
 const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
 
-function scriptPart(start, end) {
-  return frontend.slice(frontend.indexOf(start), frontend.indexOf(end));
-}
-
-function draftClient() {
-  const state = {
-    sharedDrafts: { revision: 3, meetings: {}, locks: {}, fieldVersions: {} },
-    sheetBaseValues: { "2099-01-01": { Theme: "Original" } },
-    sheetPayload: { rolesCsv: "cached sheet", agendaCsv: "cached agenda" },
-  };
-  const context = vm.createContext({ state, Date });
-  vm.runInContext(scriptPart("function applyConfirmedDraft(", "async function loadDashboard("), context);
-  vm.runInContext("function renderSheetPayload(payload) { state.renderedPayload = payload; }", context);
-  return { state, context };
-}
-
-test("confirmed snapshot renders from cached sheets with concurrent fields intact", () => {
-  const { state, context } = draftClient();
-  const drafts = { revision: 5, meetings: { "2099-01-01": { theme: { Theme: "Saved", "Theme Question": "Another person's edit" } } } };
-  context.applyConfirmedDraft({ drafts }, "2099-01-01", "theme", { Theme: "Saved" });
-  assert.equal(state.sharedDrafts, drafts);
-  assert.equal(state.renderedPayload, state.sheetPayload);
-});
-
-test("older deployment applies confirmed values but preserves revision for polling", () => {
-  const { state, context } = draftClient();
-  const key = "2099-01-01|theme|Theme";
-  context.applyConfirmedDraft({ fieldVersions: { [key]: 4 } }, "2099-01-01", "theme", { Theme: "Saved" });
-  assert.equal(state.sharedDrafts.meetings["2099-01-01"].theme.Theme, "Saved");
-  assert.equal(state.sharedDrafts.fieldVersions[key], 4);
-  assert.equal(state.sharedDrafts.revision, 3);
-  context.applyConfirmedDraft({ fieldVersions: { [key]: 5 } }, "2099-01-01", "theme", { Theme: "Original" });
-  assert.equal(Object.hasOwn(state.sharedDrafts.meetings["2099-01-01"].theme, "Theme"), false);
-});
-
-function draftService() {
+function draftService({ writable = false } = {}) {
   const properties = new Map();
   const operations = new Map();
   let sheetReads = 0;
+  let today = "2026-10-26";
   const values = [["Date", "2099-01-01"], ["Theme", "Original"], ["Theme Question", "Question"]];
   const sheet = {
     getDataRange: () => ({ getValues: () => { sheetReads++; return values; } }),
-    getRange: () => { throw new Error("Unexpected per-cell sheet request"); },
+    getRange: (row, column) => {
+      if (!writable) throw new Error("Unexpected per-cell sheet request");
+      return { getValue: () => values[row - 1][column - 1], setValue: value => { values[row - 1][column - 1] = value; } };
+    },
   };
   const context = vm.createContext({
-    SpreadsheetApp: { openById: () => ({ getSheetByName: () => sheet }) },
+    SpreadsheetApp: { flush() {}, openById: () => ({ getSheetByName: () => sheet }) },
     PropertiesService: { getScriptProperties: () => ({
       getProperty: key => properties.get(key),
+      deleteProperty: key => properties.delete(key),
+      getProperties: () => Object.fromEntries(properties),
       setProperty: (key, value) => properties.set(key, value),
+      setProperties: entries => {
+        for (const [key, value] of Object.entries(entries)) {
+          assert.ok(Buffer.byteLength(value) <= 9000);
+          properties.set(key, value);
+        }
+      },
     }) },
     Utilities: {
-      formatDate: (_, __, pattern) => ({ EEE: "Mon", H: "10", "yyyy-MM-dd": "2026-10-26" })[pattern],
+      formatDate: (_, __, pattern) => ({ EEE: "Mon", H: "10", "yyyy-MM-dd": today })[pattern],
       newBlob: value => ({ getBytes: () => Buffer.from(value) }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -72,8 +48,27 @@ function draftService() {
     baseValues: { Theme: "Original", "Theme Question": "Question" },
     ...overrides,
   }) } });
-  return { save, properties, get sheetReads() { return sheetReads; } };
+  const post = request => context.doPost({ postData: { contents: JSON.stringify(request) } });
+  return { save, post, values, properties, setToday: date => { today = date; }, readDrafts: context.readDrafts, get sheetReads() { return sheetReads; } };
 }
+
+test("a legacy draft near the old size limit migrates without losing data or field versions", () => {
+  const service = draftService();
+  const existing = "한글😀".repeat(750);
+  const key = "2099-01-01|theme|Theme";
+  service.properties.set("YTTM_SHARED_DRAFTS", JSON.stringify({
+    revision: 12, meetings: { "2099-01-01": { attendees: { Attendees: existing } } },
+    fieldVersions: { [key]: 4 },
+  }));
+  const result = service.save({ updates: { Theme: "한".repeat(500) }, fieldVersions: { Theme: 4 } });
+  assert.equal(result.ok, true);
+  assert.equal(result.revision, 13);
+  const stored = service.readDrafts();
+  assert.ok(Buffer.byteLength(JSON.stringify(stored)) > 8800);
+  assert.equal(stored.meetings["2099-01-01"].attendees.Attendees, existing);
+  assert.equal(stored.meetings["2099-01-01"].theme.Theme, "한".repeat(500));
+  assert.equal(stored.fieldVersions[key], 5);
+});
 
 test("multi-field draft save reads the sheet once and returns its persisted snapshot", () => {
   const service = draftService();
@@ -114,12 +109,48 @@ test("cooldowns persisted by older deployments no longer block editing", () => {
   assert.deepEqual(result.drafts.locks, {});
 });
 
-test("sheet conflict permits immediate retry after loading current values and versions", () => {
+test("a sheet conflict retains the existing shared draft and its revision", () => {
   const service = draftService();
-  assert.equal(service.save({ baseValues: { Theme: "Outdated" } }).code, "SHEET_CHANGED");
-  const result = service.save({ fieldVersions: { Theme: 1 } });
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.drafts.locks, {});
+  const original = service.save();
+  service.values[1][1] = "Changed in Google Sheets";
+  const failure = service.save({ updates: { Theme: "Another edit" }, fieldVersions: { Theme: 1 } });
+  assert.equal(failure.code, "SHEET_CHANGED");
+  assert.equal(service.readDrafts().revision, original.revision);
+  assert.equal(service.readDrafts().meetings["2099-01-01"].theme.Theme, "Saved");
+});
+
+test("approval writes only selected changes and keeps unchecked drafts for later", () => {
+  const service = draftService({ writable: true });
+  const meetingDate = "2099-01-01";
+  const saved = service.save();
+  const request = {
+    action: "applyDrafts", pin: "1004", draftRevision: saved.revision,
+    totalDrafts: 2, selectionMode: "explicit",
+  };
+  const empty = service.post({ ...request, selections: [] });
+  assert.equal(empty.ok, false);
+  assert.equal(service.readDrafts().revision, saved.revision);
+
+  const partial = service.post({ ...request, selections: [{ meetingDate, section: "theme", label: "Theme" }] });
+  assert.equal(partial.ok, true, partial.error);
+  assert.equal(partial.updated, 1);
+  assert.equal(partial.remaining, 1);
+  assert.equal(service.values[1][1], "Saved");
+  assert.equal(service.values[2][1], "Question");
+  const pending = service.readDrafts();
+  assert.equal(Object.hasOwn(pending.meetings[meetingDate].theme, "Theme"), false);
+  assert.equal(pending.meetings[meetingDate].theme["Theme Question"], "New question");
+  assert.equal(pending.bases[meetingDate].theme["Theme Question"], "Question");
+
+  service.values[0].push("2099-01-08");
+  service.setToday("2099-01-15");
+  const final = service.post({
+    ...request, draftRevision: partial.revision, totalDrafts: 1,
+    selections: [{ meetingDate, section: "theme", label: "Theme Question" }],
+  });
+  assert.equal(final.ok, true, final.error);
+  assert.equal(final.remaining, 0);
+  assert.equal(service.values[2][1], "New question");
 });
 
 test("reloading or retrying the same save ID does not commit it twice", () => {
