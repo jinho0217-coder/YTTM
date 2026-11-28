@@ -1078,6 +1078,8 @@ function render(model, meta) {
   renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
+let dashboardLoadVersion = 0;
+
 async function loadDashboard() {
   const loadVersion = ++dashboardLoadVersion;
   const bookingWriteVersion = libraryBookingWriteVersion;
