@@ -33,7 +33,7 @@ test("Supabase renders while the shared drafts and Google Sheet comparison are s
     activeMeeting = () => null;
     renderLibraryBooking = () => {};
     renderSheetPayload = payload => { state.model = {}; recordRender(payload); };
-    checkSheetDifferences = () => new Promise(() => {});
+    loadLiveSheet = () => new Promise(() => {});
   `, Object.assign(context, { snapshot }));
   assert.equal(await context.loadDashboard(), true);
   assert.deepEqual(events, ["Supabase"]);
@@ -52,6 +52,22 @@ test("Google Sheet comparison reports altered and cleared cells only", () => {
   assert.equal(differences[0].meetingDate, "2026-11-29");
   assert.equal(differences[0].field, "Role 0");
   assert.equal(differences[1].current, "Replacement");
+});
+
+test("live Sheet values replace the initial display and unapproved editable values enter the approval list", async () => {
+  const roles = ["Date,2026-11-29", "Chairperson,", ...Array.from({ length: 9 }, (_, i) => `Role ${i},`)].join("\n");
+  const live = { rolesCsv: roles.replace("Chairperson,", "Chairperson,William"), agendaCsv: "" };
+  const context = dashboard({ live });
+  vm.runInContext(`
+    fetchPublicSheets = async () => live;
+    renderSheetPayload = () => {};
+  `, context);
+  await context.loadLiveSheet({ rolesCsv: roles }, 0);
+  const entries = context.pendingApprovalEntries();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].label, "Chairperson");
+  assert.equal(entries[0].value, "William");
+  assert.equal(vm.runInContext("state.sheetPayload.provider", context), "Google Sheets");
 });
 
 test("reconciliation accepts either current source and rejects a stale comparison", () => {

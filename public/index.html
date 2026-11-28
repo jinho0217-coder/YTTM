@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261128-meeting-arrows" />
+    <link rel="stylesheet" href="./styles.css?v=20261128-live-sheet-approval" />
   </head>
   <body>
     <div class="page-shell">
@@ -214,16 +214,11 @@
           <summary id="adminApplyCompact">Choose changes to apply</summary>
           <div id="adminApplyList" class="admin-apply-list"></div>
         </details>
-        <details id="sheetDifferences" class="sheet-differences" hidden>
-          <summary id="sheetDifferencesSummary"></summary>
-          <ul id="sheetDifferencesList"></ul>
-        </details>
         <label id="adminApprovalControls" class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
         <p id="adminApplyStatus" class="meeting-edit-status" role="status"></p>
         <div class="meeting-edit-actions admin-actions">
           <button type="button" id="openChangePinDialog" class="secondary-button">Change PIN</button>
           <button type="submit" id="confirmApplySheets" class="primary-button">Apply changes</button>
-          <button type="button" id="confirmSheetChoices" class="primary-button sheet-choice-apply" title="Approve selected values" aria-label="Approve selected values" hidden disabled>✓</button>
         </div>
       </form>
     </dialog>
@@ -384,6 +379,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261128-meeting-arrows" defer></script>
+    <script src="./app.js?v=20261128-live-sheet-approval" defer></script>
   </body>
 </html>
