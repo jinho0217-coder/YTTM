@@ -54,6 +54,47 @@ test("Google Sheet comparison reports altered and cleared cells only", () => {
   assert.equal(differences[1].current, "Replacement");
 });
 
+test("2027 meetings follow 2026 and join role values by their row labels", () => {
+  const context = dashboard();
+  const rows = context.appendMeetingYear(
+    [["Date", "2026-12-27"], ["#", "#622"], ["Chairperson", "December"], ["Timer", "Other"]],
+    [["Date", "2027-01-03"], ["#", "#623"], ["Timer", "January timer"], ["Chairperson", "January"], ["Attendees", "Guest"]],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
+    ["Date", "2026-12-27", "2027-01-03"], ["#", "#622", "#623"],
+    ["Chairperson", "December", "January"], ["Timer", "Other", "January timer"], ["Attendees", "", "Guest"],
+  ]);
+});
+
+test("an approved batch routes identical column numbers to their own year's roles tab", () => {
+  const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
+  const values = new Map();
+  const writes = [
+    { meetingDate: "2026-12-27", label: "Chairperson", previousValue: "", value: "December" },
+    { meetingDate: "2027-01-03", label: "Chairperson", previousValue: "", value: "January" },
+  ];
+  const context = vm.createContext({
+    SpreadsheetApp: {
+      flush() {},
+      openById: () => ({ getSheetByName: name => ({
+        getDataRange: () => ({ getValues: () => [["Date", name === "27_Roles" ? "2027-01-03" : "2026-12-27"], ["Chairperson", ""]] }),
+        getRange: (row, column) => ({ setValue: value => values.set(`${name}:${row}:${column}`, value) }),
+      }) }),
+    },
+    Utilities: { formatDate: () => "2026-12-20" },
+    rpc: (path, args) => {
+      if (path === "rpc/yttm_claim_sheet_job") return { id: 1, attempt: 1, writes };
+      assert.equal(path, "rpc/yttm_finish_sheet_job");
+      assert.equal(args.p_error, undefined);
+      return true;
+    },
+  });
+  vm.runInContext(backend, context);
+  vm.runInContext("primaryRequest = rpc", context);
+  assert.equal(context.syncPrimarySheetJob(), true);
+  assert.deepEqual([...values], [["26_Roles:2:2", "December"], ["27_Roles:2:2", "January"]]);
+});
+
 test("live Sheet values replace the initial display and unapproved editable values enter the approval list", async () => {
   const roles = ["Date,2026-11-29", "Chairperson,", ...Array.from({ length: 9 }, (_, i) => `Role ${i},`)].join("\n");
   const live = { rolesCsv: roles.replace("Chairperson,", "Chairperson,William"), agendaCsv: "" };

@@ -1,6 +1,7 @@
 const SPREADSHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const ROLES_SHEET = "26_Roles";
 const AGENDA_SHEET = "26_Agenda";
+const NEXT_ROLES_SHEET = "27_Roles";
 const TIME_ZONE = "Asia/Seoul";
 const DRAFTS_PROPERTY = "YTTM_SHARED_DRAFTS";
 const DRAFTS_MANIFEST_PROPERTY = DRAFTS_PROPERTY + "_MANIFEST";
@@ -52,8 +53,10 @@ function readSheetPayload() {
   const agenda = spreadsheet.getSheetByName(AGENDA_SHEET);
   if (!roles) throw new Error(`${ROLES_SHEET} was not found.`);
   if (!agenda) throw new Error(`${AGENDA_SHEET} was not found.`);
+  const nextRoles = spreadsheet.getSheetByName(NEXT_ROLES_SHEET);
   return {
     ok: true,
+    nextYearRolesCsv: nextRoles ? sheetCsv(nextRoles) : null,
     rolesCsv: sheetCsv(roles),
     agendaCsv: sheetCsv(agenda),
     fetchedAt: new Date().toISOString(),
@@ -95,11 +98,12 @@ function meetingReferenceDate() {
   return Utilities.formatDate(reference, TIME_ZONE, "yyyy-MM-dd");
 }
 
-function sheetContext() {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(ROLES_SHEET);
-  if (!sheet) throw new Error("26_Roles was not found.");
+function sheetContext(name = ROLES_SHEET) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if (!sheet && name === NEXT_ROLES_SHEET) return null;
+  if (!sheet) throw new Error(name + " was not found.");
   const values = sheet.getDataRange().getValues();
-  if (!values.length) throw new Error("26_Roles is empty.");
+  if (!values.length) throw new Error(name + " is empty.");
   const rowByLabel = new Map();
   values.forEach((row, index) => rowByLabel.set(String(row[0] || "").trim(), index + 1));
   const referenceDate = meetingReferenceDate();
@@ -115,6 +119,14 @@ function sheetContext() {
   const previousMeeting = previousCandidates[previousCandidates.length - 1] || null;
   const allowedMeetings = columns.filter(item => item.date >= referenceDate || item.column === previousMeeting?.column).map(({ date, column }) => ({ date, column }));
   return { sheet, values, rowByLabel, allowedMeetings, columns };
+}
+
+function meetingSheetContexts() {
+  return [sheetContext(), sheetContext(NEXT_ROLES_SHEET)].filter(Boolean);
+}
+
+function meetingSheetTargets(contexts) {
+  return contexts.flatMap(context => context.columns.map(column => ({ ...column, context })));
 }
 
 function assignmentSection(label) {
@@ -180,7 +192,7 @@ function refreshAutomaticConfirmations() {
   try {
     lock.waitLock(10000);
     if (cache.get("YTTM_AUTO_CONFIRM_DAY") === today) return;
-    confirmDueAssignments(sheetContext(), readDrafts(), today);
+    meetingSheetContexts().forEach(context => confirmDueAssignments(context, readDrafts(), today));
     cache.put("YTTM_AUTO_CONFIRM_DAY", today, 300);
   } finally { lock.releaseLock(); }
 }
@@ -226,19 +238,22 @@ function syncPrimarySheetJob() {
   const job = primaryRequest("rpc/yttm_claim_sheet_job", {});
   if (!job) return false;
   try {
-    const context = sheetContext();
+    const meetings = meetingSheetTargets(meetingSheetContexts());
     const targets = job.writes.map(item => {
-      const column = context.columns.find(entry => entry.date === item.meetingDate)?.column;
+      const target = meetings.find(entry => entry.date === item.meetingDate);
+      if (!target) throw new Error("Sheet layout changed.");
+      const { column, context } = target;
       const row = context.rowByLabel.get(item.label);
       if (!column || (!row && item.label !== "Attendees")) throw new Error("Sheet layout changed.");
       const current = row ? String(context.values[row - 1]?.[column - 1] ?? "").trim() : "";
       if (!job.force && current !== item.previousValue && current !== item.value) {
         throw new Error("Google Sheets changed after approval. Restore or reconcile the affected cell before retry.");
       }
-      return { ...item, row, column, current };
+      return { ...item, row, column, current, context };
     });
     targets.forEach(item => {
       if (item.current === item.value) return;
+      const { context } = item;
       let row = item.row || context.rowByLabel.get(item.label);
       if (!row) {
         row = context.sheet.getLastRow() + 1;
@@ -507,12 +522,20 @@ function doPost(event) {
         if (result.ok) return jsonResponse(attachCurrentDrafts(result));
       }
     }
-    const context = sheetContext();
+    const referenceDate = meetingReferenceDate();
+    const saveDate = String(request.meetingDate || "");
+    const contexts = request.action === "saveDraft" && saveDate >= referenceDate
+      ? [sheetContext(saveDate.startsWith("2027-") ? NEXT_ROLES_SHEET : ROLES_SHEET)].filter(Boolean)
+      : meetingSheetContexts();
+    const meetings = meetingSheetTargets(contexts);
+    const previous = meetings.filter(item => item.date < referenceDate && !item.noMeeting).at(-1);
+    const allowedMeetings = meetings.filter(item => item.date >= referenceDate || item === previous);
     const today = Utilities.formatDate(new Date(), TIME_ZONE, "yyyy-MM-dd");
-    confirmDueAssignments(context, readDrafts(), today);
+    contexts.forEach(context => confirmDueAssignments(context, readDrafts(), today));
 
     if (request.action === "saveDraft") {
-      const target = requireAllowedMeeting(context, request.meetingDate);
+      const target = requireAllowedMeeting({ allowedMeetings }, request.meetingDate);
+      const { context } = target;
       const updates = validatedUpdates(request.section, request.updates);
       Object.keys(updates).forEach(label => { updates[label] = confirmedValueOnDate(label, updates[label], target.date, today); });
       const drafts = readDrafts();
@@ -599,8 +622,9 @@ function doPost(event) {
             const key = fieldKey(meetingDate, section, label);
             allEntries.push({ meetingDate, section, label, value: updates[label] });
             if (!selectedKeys.has(key)) return;
-            const target = context.columns.find(column => column.date === meetingDate);
+            const target = meetings.find(column => column.date === meetingDate);
             if (!target) throw new Error("The selected meeting date was not found in Google Sheets.");
+            const { context } = target;
             const row = context.rowByLabel.get(label);
             if (!row && label !== "Attendees") throw new Error(`Row was not found: ${label}`);
             const currentValue = row ? String(context.sheet.getRange(row, target.column).getValue() ?? "").trim() : "";
@@ -631,9 +655,11 @@ function doPost(event) {
         catch (error) { console.error("Sheet sync queued for retry.", error); }
         return operationResponse(request, { ok: true, applied: true, syncPending, revision: saved.revision, updated: writes.length, remaining: allEntries.length - writes.length });
       }
+      const sheetsByDate = new Map(meetings.map(target => [target.date, target.context]));
       let completed = 0;
       try {
         writes.forEach(item => {
+          const context = sheetsByDate.get(item.meetingDate);
           if (!item.row && item.label === "Attendees") {
             let row = context.rowByLabel.get("Attendees");
             if (!row) {
@@ -650,7 +676,8 @@ function doPost(event) {
         SpreadsheetApp.flush();
       } catch (writeError) {
         for (let index = completed - 1; index >= 0; index -= 1) {
-          try { context.sheet.getRange(writes[index].row, writes[index].column).setValue(writes[index].previousValue); } catch (_) {}
+          const item = writes[index];
+          try { sheetsByDate.get(item.meetingDate).sheet.getRange(item.row, item.column).setValue(item.previousValue); } catch (_) {}
         }
         SpreadsheetApp.flush();
         throw new Error(`Google Sheets was only partially updated, so the operation was rolled back. ${writeError.message || writeError}`);

@@ -2,6 +2,9 @@ const state = { model: null, member: "all", role: "all", meetingView: "coming", 
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 let sheetDifferences = [];
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
+const NEXT_YEAR_ROLES_GID = 1696517644;
+const NEXT_YEAR_ROLES_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=${NEXT_YEAR_ROLES_GID}`;
+const NEXT_YEAR_AGENDA_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=2077206385`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
 const LIBRARY_ENDPOINT = clean(window.YTTM_CONFIG?.libraryEndpoint);
 const THEME_EDIT_FIELDS = ["Theme", "Theme Question", "Word of the day", "Quote of the day"];
@@ -187,6 +190,36 @@ async function fetchSupabaseSnapshots() {
   return { rolesCsv: roles.csv, agendaCsv: agenda.csv, fetchedAt: roles.synced_at, source: SHEET_SOURCE, provider: "Supabase" };
 }
 
+async function fetchNextYearRoles() {
+  const response = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${NEXT_YEAR_ROLES_GID}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) throw new Error(`Google Sheets returned ${response.status}`);
+  const rows = parseCsv(await response.text());
+  if (!rows[0]?.some(value => parseDate(value) && value.startsWith("2027-"))) {
+    throw new Error("27_Roles has no meeting dates.");
+  }
+  return rows;
+}
+
+function appendMeetingYear(currentRows, nextRows) {
+  if (!nextRows?.length) return currentRows;
+  const currentWidth = currentRows[0].length;
+  const nextWidth = nextRows[0].length;
+  const currentFields = rowMap(currentRows.slice(2));
+  const nextFields = rowMap(nextRows.slice(2));
+  const fields = [...new Set([...currentFields.keys(), ...nextFields.keys()])].filter(Boolean);
+  const cells = (row, start, width) => Array.from({ length: width }, (_, index) => row?.[start + index] ?? "");
+  const header = currentRows.slice(0, 2).map((row, index) => [
+    ...cells(row, 0, currentWidth), ...cells(nextRows[index], 1, nextWidth - 1),
+  ]);
+  return [...header, ...fields.map(field => [field,
+    ...cells(currentFields.get(field)?.row, 1, currentWidth - 1),
+    ...cells(nextFields.get(field)?.row, 1, nextWidth - 1),
+  ])];
+}
+
 function dashboardSheetDifferences(snapshot, live) {
   const roleKeys = new Map();
   function roleCells(csv) {
@@ -229,15 +262,18 @@ function pendingApprovalEntries() {
       label: difference.field, value: difference.current, difference }))];
 }
 
-async function loadLiveSheet(payload, loadVersion) {
+async function loadLiveSheet(payload, loadVersion, compareApproved = true) {
   try {
     const live = await fetchPublicSheets();
     if (loadVersion !== dashboardLoadVersion) return;
     const rows = parseCsv(live.rolesCsv);
     if (rows.length < 10) throw new Error("26_Roles is empty.");
-    sheetDifferences = dashboardSheetDifferences(payload, live).filter(item => isReconciledField(item.field));
-    captureSheetBaseValues(rows);
-    state.sheetPayload = { ...live, provider: "Google Sheets" };
+    if (compareApproved) {
+      sheetDifferences = dashboardSheetDifferences(payload, live).filter(item => isReconciledField(item.field));
+    }
+    const nextYearRoles = live.nextYearRolesCsv ? parseCsv(live.nextYearRolesCsv) : payload.nextYearRoles;
+    captureSheetBaseValues(appendMeetingYear(rows, nextYearRoles));
+    state.sheetPayload = { ...live, nextYearRoles, provider: "Google Sheets" };
     renderSheetPayload(state.sheetPayload);
   } catch (error) {
     console.warn("Unable to refresh from Google Sheets.", error);
@@ -839,7 +875,8 @@ function initializeLibrarySettings() {
 
 function canEditActiveMeeting() {
   const meeting = activeMeeting();
-  return Boolean(meeting) && (meeting.date >= meetingReferenceDateKst() || meeting.col === state.model.previousEditableMeeting?.col);
+  return Boolean(meeting) && (!sheetDateValue(meeting.date).startsWith("2027-") || Boolean(state.sheetPayload?.nextYearRolesCsv)) &&
+    (meeting.date >= meetingReferenceDateKst() || meeting.col === state.model.previousEditableMeeting?.col);
 }
 
 function editableValue(meeting, label) {
@@ -1407,6 +1444,11 @@ function renderLibraryBooking(meeting) {
 function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
+  const nextYear = meeting && sheetDateValue(meeting.date).startsWith("2027-");
+  document.getElementById("sheetLink").href = nextYear ? NEXT_YEAR_ROLES_SOURCE : SHEET_SOURCE;
+  const agendaLink = document.getElementById("nextYearAgendaLink");
+  agendaLink.href = NEXT_YEAR_AGENDA_SOURCE;
+  agendaLink.hidden = !nextYear;
   renderLibraryBooking(meeting);
   document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
@@ -1417,7 +1459,8 @@ function renderThisWeek(model) {
   const specialTab = document.querySelector("[data-special-event-tab]");
   if (specialTab) {
     specialTab.disabled = !canEditActiveMeeting();
-    specialTab.title = specialTab.disabled ? "Only the immediately previous meeting and future meetings can be edited." : "Edit Special Event for this meeting.";
+    specialTab.title = nextYear && specialTab.disabled ? "Edit 2027 meetings in Google Sheets." :
+      specialTab.disabled ? "Only the immediately previous meeting and future meetings can be edited." : "Edit Special Event for this meeting.";
   }
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
@@ -1603,13 +1646,12 @@ function render(model, meta) {
   setText("roleCount", model.assignments.length);
   setText("speechCount", model.speeches.length);
   setText("memberCount", model.members.length);
-  document.getElementById("sheetLink").href = meta.source;
   setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · ${meta.provider || "Google Sheets"}`);
   renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
 function renderSheetPayload(payload) {
-  const rolesRows = parseCsv(payload.rolesCsv);
+  const rolesRows = appendMeetingYear(parseCsv(payload.rolesCsv), payload.nextYearRoles);
   applySharedDraftsToRows(rolesRows, state.sharedDrafts);
   applyLocalSavesToRows(rolesRows);
   confirmDueAssignmentRows(rolesRows);
@@ -1662,6 +1704,10 @@ async function loadDashboard(force = false) {
     console.warn("Shared drafts are temporarily unavailable.", error);
     return null;
   });
+  const nextYearRoles = fetchNextYearRoles().catch(error => {
+    console.warn("Unable to load 2027 meetings.", error);
+    return null;
+  });
   try {
     const isGitHubPages = location.hostname.endsWith(".github.io");
     let payload;
@@ -1685,8 +1731,9 @@ async function loadDashboard(force = false) {
     }
     const rolesRows = parseCsv(payload.rolesCsv);
     if (rolesRows.length < 10) throw new Error("26_Roles is empty.");
+    payload = { ...payload, nextYearRoles: payload.nextYearRolesCsv ? parseCsv(payload.nextYearRolesCsv) : await nextYearRoles };
     if (loadVersion !== dashboardLoadVersion) return;
-    captureSheetBaseValues(rolesRows);
+    captureSheetBaseValues(appendMeetingYear(rolesRows, payload.nextYearRoles));
     state.sheetPayload = payload;
     renderSheetPayload(payload);
     banner.className = "status-banner ready";
@@ -1695,7 +1742,7 @@ async function loadDashboard(force = false) {
     banner.textContent = meeting
       ? `Loaded ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from ${provider}.`
       : `Loaded the meeting schedule from ${provider}.`;
-    if (provider === "Supabase") void loadLiveSheet(payload, loadVersion);
+    if (provider === "Supabase" || (!payload.nextYearRolesCsv && WRITE_ENDPOINT)) void loadLiveSheet(payload, loadVersion, provider === "Supabase");
     void sharedDrafts.then(drafts => {
       if (loadVersion !== dashboardLoadVersion || !drafts) return;
       if (Number(drafts.revision || 0) >= Number(state.sharedDrafts.revision || 0)) {
