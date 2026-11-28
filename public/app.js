@@ -316,9 +316,7 @@ function setMeetingOffset(offset, updateHash = true, scrollToTop = false) {
   state.meetingOffset = nextOffset;
   state.meetingView = nextOffset < 0 ? "past" : nextOffset > 0 ? "next" : "coming";
   updateMeetingArrowControls();
-  document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
-    button.setAttribute("aria-selected", String(button.dataset.dashboardTab === state.meetingView));
-  });
+  document.getElementById("comingMeetingButton").setAttribute("aria-current", String(nextOffset === 0));
   document.querySelectorAll("[data-tab-panel]").forEach(panel => {
     panel.hidden = panel.dataset.tabPanel !== "week";
   });
@@ -2044,12 +2042,7 @@ document.getElementById("meetingEditFields").addEventListener("click", event => 
   const input = document.querySelector(`#meetingEditFields [data-edit-field="${CSS.escape(clearButton.dataset.clearField)}"]`);
   if (input) { input.value = ""; resetTentativeAssignment(input); input.focus(); updateMeetingEditorState(); }
 });
-document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
-  button.addEventListener("click", () => {
-    if (button.dataset.dashboardTab === "coming") animateReturnToComing();
-    else if (!swipeAnimating) animateHeaderMeeting(button.dataset.dashboardTab);
-  });
-});
+document.getElementById("comingMeetingButton").addEventListener("click", animateReturnToComing);
 let swipeStart = null;
 let suppressSwipeClickUntil = 0;
 let swipeAnimating = false;
@@ -2071,18 +2064,6 @@ function moveMeetingByArrow(direction) {
   const targetIndex = state.model.comingMeetingIndex + targetOffset;
   if (targetIndex < 0 || targetIndex >= state.model.regularMeetings.length) return;
   completeMeetingSwipe(targetOffset, direction < 0 ? 1 : -1);
-}
-
-function animateHeaderMeeting(tabName) {
-  const targetOffset = tabName === "past" ? -1 : 1;
-  if (!state.model || state.meetingOffset === targetOffset) {
-    setActiveTab(tabName);
-    return;
-  }
-  const targetIndex = state.model.comingMeetingIndex + targetOffset;
-  if (targetIndex < 0 || targetIndex >= state.model.regularMeetings.length) return;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  completeMeetingSwipe(targetOffset, targetOffset < state.meetingOffset ? 1 : -1);
 }
 
 document.querySelectorAll("[data-meeting-arrow]").forEach(button => {

@@ -128,7 +128,7 @@ a { color: inherit; }
   line-height: 1;
 }
 .dashboard-tabs button:hover { color: var(--red); background: rgba(159,36,53,.06); }
-.dashboard-tabs button[aria-selected="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
+.dashboard-tabs button[aria-current="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
 .dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 18px; }
 .dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
 .special-event-tab { display: inline-flex; align-items: center; min-height: 36px; padding: 8px 14px; color: var(--blue); background: transparent; border: 1px solid rgba(30,114,133,.3); border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
@@ -598,7 +598,7 @@ footer p { text-align: right; }
   .brand { gap: 9px; }
   .brand-logo { width: 42px; height: 42px; padding: 2px; }
   .brand strong { font-size: 11px; }
-  .dashboard-tabs { top: 66px; display: grid; grid-template-columns: 38px minmax(0, .8fr) minmax(0, 1.25fr) minmax(0, .8fr) 38px; padding: 10px 12px; overflow: visible; }
+  .dashboard-tabs { top: 66px; display: grid; grid-template-columns: 38px minmax(112px, auto) 38px; padding: 10px 12px; overflow: visible; }
   .dashboard-tabs { scrollbar-width: none; }
   .dashboard-tabs::-webkit-scrollbar { display: none; }
   .dashboard-tabs button { min-width: 0; min-height: 40px; padding: 8px 5px; font-size: 16px; letter-spacing: -.025em; white-space: nowrap; touch-action: manipulation; }

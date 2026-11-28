@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261128-supabase-pins" />
+    <link rel="stylesheet" href="./styles.css?v=20261128-meeting-arrows" />
   </head>
   <body>
     <div class="page-shell">
@@ -24,11 +24,9 @@
         </div>
       </header>
 
-      <nav class="dashboard-tabs" aria-label="Meeting views" role="tablist">
+      <nav class="dashboard-tabs" aria-label="Meeting navigation">
         <button type="button" class="meeting-arrow" data-meeting-arrow="-1" aria-label="Previous meeting. Hold to go to the first meeting.">◀</button>
-        <button type="button" role="tab" data-dashboard-tab="past" aria-selected="false">Past</button>
-        <button type="button" role="tab" data-dashboard-tab="coming" aria-selected="true">Coming Up</button>
-        <button type="button" role="tab" data-dashboard-tab="next" aria-selected="false">Next</button>
+        <button type="button" id="comingMeetingButton" aria-current="true">Coming Up</button>
         <button type="button" class="meeting-arrow" data-meeting-arrow="1" aria-label="Next meeting. Hold to go to the last meeting.">▶</button>
       </nav>
 
@@ -386,6 +384,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261128-supabase-pins" defer></script>
+    <script src="./app.js?v=20261128-meeting-arrows" defer></script>
   </body>
 </html>
