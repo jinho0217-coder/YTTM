@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261121-booking-meeting-slide" />
+    <link rel="stylesheet" href="./styles.css?v=20261128-read-only" />
   </head>
   <body>
     <div class="page-shell">
@@ -15,10 +15,9 @@
           <span><strong>YEONGTONG</strong><small>TOASTMASTERS</small></span>
         </a><button id="attendeesButton" class="attendees-button" type="button" title="참석자 명단" aria-label="참석자 명단 열기" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 13a5 5 0 0 1 3 5v3"/></svg><span id="attendeesCount">0</span></button></div>
         <div class="topbar-actions">
-          <span id="draftSyncBadge" class="draft-sync-badge synced">Google Sheet synced</span>
-          <button id="applySheetsButton" class="apply-sheets-button" type="button">Apply to Google Sheets</button>
-          <button id="adminSettingsButton" class="admin-settings-button" type="button" aria-label="Open administrator settings"><span aria-hidden="true">⚙</span> Admin</button>
-          <button id="refreshButton" class="refresh-button" type="button" aria-label="Google Sheet 새로고침">
+          <a class="schedule-source-link" href="https://docs.google.com/spreadsheets/d/1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA/edit?gid=1852116681" target="_blank" rel="noopener noreferrer">Google Sheet</a>
+          <button id="requestLibraryBooking" class="schedule-source-link" type="button">Library</button>
+          <button id="refreshButton" class="refresh-button" type="button" aria-label="모임 일정 새로고침">
             <span aria-hidden="true">↻</span> Refresh
           </button>
         </div>
@@ -41,20 +40,12 @@
           </div>
           <div class="hero-meta">
             <div><span>AS OF</span><strong id="asOfDate">—</strong></div>
-            <div><span>DATA SOURCE</span><strong>LIVE GOOGLE SHEET</strong></div>
+            <div><span>DATA SOURCE</span><strong>YTTM MEETING SCHEDULE</strong></div>
             <a id="sheetLink" target="_blank" rel="noreferrer">Open source ↗</a>
           </div>
         </section>
 
-        <div id="statusBanner" class="status-banner" role="status">Loading the latest data from Google Sheets.</div>
-        <section id="localSavePanel" class="local-save-panel" aria-live="polite" hidden>
-          <p id="localSaveMessage"></p>
-          <details><summary>Pending edits on this device</summary><pre id="localSaveValues"></pre></details>
-          <div id="localSaveActions" hidden>
-            <button id="retryLocalSaves" type="button">Retry sync</button>
-            <button id="discardLocalSaves" type="button">Discard unsynced edits</button>
-          </div>
-        </section>
+        <div id="statusBanner" class="status-banner" role="status">Loading the meeting schedule.</div>
 
         <section class="metric-strip" aria-label="Key metrics" data-tab-panel="overview" hidden>
           <article class="metric-card accent-red"><span>COMPLETED MEETINGS</span><strong id="meetingCount">—</strong><small>정규 모임 기준</small></article>
@@ -113,7 +104,6 @@
               </div>
               <p id="libraryBookingMarkMessage" class="library-booking-mark-message" role="status"></p>
               <div class="meeting-action-row">
-                <button type="button" class="special-event-tab meeting-special-event-action" data-special-event-tab aria-label="Edit Special Event for this meeting">Special Event</button>
                 <div class="search-box meeting-search-box">
                   <label class="sr-only" for="memberSearchInput">Search by member name or role</label>
                   <span class="search-box-label" aria-hidden="true">Search</span>
@@ -135,11 +125,11 @@
           </article>
           <div class="week-stack">
             <article class="panel assignments-panel">
-              <div class="panel-title"><h3>Role assignments</h3><div class="panel-title-actions"><span>Click a role for details</span><button id="roleSuggestionsButton" type="button" class="people-icon" title="Suggest roles from last meeting" aria-label="Suggest roles" aria-haspopup="dialog">✦</button></div></div>
+              <div class="panel-title"><h3>Role assignments</h3><div class="panel-title-actions"><span>Click a role for details</span></div></div>
               <div id="weekAssignments" class="assignment-grid"></div>
             </article>
             <article class="panel week-speeches-panel">
-              <div class="panel-title"><h3>Prepared speeches</h3><div class="panel-title-actions"><span>Click for details</span><button type="button" class="panel-edit-button" data-edit-section="speeches">Edit</button></div></div>
+              <div class="panel-title"><h3>Prepared speeches</h3><div class="panel-title-actions"><span>Click for details</span></div></div>
               <div id="weekSpeeches" class="week-speeches"></div>
             </article>
             <article class="panel agenda-panel">
@@ -147,7 +137,7 @@
               <div id="agendaTimeline" class="agenda-timeline"></div>
             </article>
             <article class="panel awards-panel">
-              <div class="panel-title"><h3>Meeting awards</h3><div class="panel-title-actions"><span>Click an award for details</span><button type="button" class="panel-edit-button" data-edit-section="awards">Edit</button></div></div>
+              <div class="panel-title"><h3>Meeting awards</h3><div class="panel-title-actions"><span>Click an award for details</span></div></div>
               <div id="meetingAwards" class="meeting-awards"></div>
             </article>
           </div>
@@ -173,7 +163,6 @@
         <button type="button" id="closeSpeechDialog" class="dialog-close" aria-label="Close speech details">&times;</button>
       </div>
       <div id="speechDialogDetails" class="speech-dialog-details"></div>
-      <div id="speechDialogActions" class="agenda-dialog-actions"><button type="button" id="speechDialogEditButton" class="primary-button">Edit this speech</button></div>
     </dialog>
     <dialog id="agendaDetailsDialog" class="agenda-dialog" aria-labelledby="agendaDialogTitle">
       <div class="missing-dialog-heading">
@@ -181,7 +170,6 @@
         <button type="button" id="closeAgendaDialog" class="dialog-close" aria-label="Close agenda details">&times;</button>
       </div>
       <div id="agendaDialogDetails" class="agenda-dialog-details"></div>
-      <div id="agendaDialogActions" class="agenda-dialog-actions hidden"><button type="button" id="agendaDialogEditButton" class="primary-button">Edit</button></div>
     </dialog>
     <dialog id="searchResultsDialog" class="search-results-dialog" aria-labelledby="searchResultsTitle">
       <div class="missing-dialog-heading">
@@ -189,58 +177,6 @@
         <button type="button" id="closeSearchResultsDialog" class="dialog-close" aria-label="Close search results">&times;</button>
       </div>
       <div id="searchResultsDialogBody" class="search-results-dialog-body"></div>
-    </dialog>
-    <dialog id="meetingEditDialog" class="meeting-edit-dialog" aria-labelledby="meetingEditTitle">
-      <form id="meetingEditForm" method="dialog">
-        <div class="missing-dialog-heading">
-          <div><p id="meetingEditEyebrow">EDIT MEETING</p><h2 id="meetingEditTitle">Edit meeting</h2></div>
-          <button type="button" id="closeMeetingEditDialog" class="dialog-close" aria-label="Close meeting editor">&times;</button>
-        </div>
-        <p class="meeting-edit-help">Changes appear immediately on this device and sync to the shared draft in the background. Google Sheets is updated after administrator approval.</p>
-        <div id="meetingEditFields" class="meeting-edit-fields"></div>
-        <p id="meetingEditStatus" class="meeting-edit-status" role="status"></p>
-        <div class="meeting-edit-actions">
-          <button type="button" id="cancelMeetingEdit" class="secondary-button">Cancel</button>
-          <button type="submit" id="saveMeetingEdit" class="primary-button"><span class="save-button-label">Save changes</span></button>
-        </div>
-      </form>
-    </dialog>
-    <dialog id="adminApplyDialog" class="admin-dialog" aria-labelledby="adminApplyTitle">
-      <form id="adminApplyForm" method="dialog">
-        <div class="missing-dialog-heading">
-          <div><p>ADMIN APPROVAL</p><h2 id="adminApplyTitle">Apply shared draft</h2></div>
-          <button type="button" id="closeAdminApplyDialog" class="dialog-close" aria-label="Close administrator approval">&times;</button>
-        </div>
-        <p id="adminApplySummary" class="admin-dialog-copy">No pending shared changes.</p>
-        <details id="adminApplyDetails" class="admin-apply-details">
-          <summary id="adminApplyCompact">Choose changes to apply</summary>
-          <div id="adminApplyList" class="admin-apply-list"></div>
-        </details>
-        <label class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
-        <p id="adminApplyStatus" class="meeting-edit-status" role="status"></p>
-        <div class="meeting-edit-actions admin-actions">
-          <button type="button" id="openChangePinDialog" class="secondary-button">Change PIN</button>
-          <button type="submit" id="confirmApplySheets" class="primary-button">Apply changes</button>
-        </div>
-      </form>
-    </dialog>
-    <dialog id="changePinDialog" class="admin-dialog" aria-labelledby="changePinTitle">
-      <form id="changePinForm" method="dialog">
-        <div class="missing-dialog-heading">
-          <div><p>ADMIN</p><h2 id="changePinTitle">관리자 설정</h2></div>
-          <button type="button" id="closeChangePinDialog" class="dialog-close" aria-label="Close PIN editor">&times;</button>
-        </div>
-        <div class="pin-change-fields">
-          <label class="admin-pin-field">Current or master 4-digit PIN<input id="currentAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
-          <label class="admin-pin-field">New 4-digit PIN<input id="newAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
-          <label class="admin-pin-field">Confirm new PIN<input id="confirmAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
-        </div>
-        <p id="changePinStatus" class="meeting-edit-status" role="status"></p>
-        <div class="meeting-edit-actions">
-          <button type="button" id="requestLibraryBooking" class="manual-library-booking library-settings-icon" aria-label="Library Reservation Check" title="Library Reservation Check"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18m-13 5 3 3 5-5"/></svg></button>
-          <button type="submit" class="primary-button">Change PIN</button>
-        </div>
-      </form>
     </dialog>
     <dialog id="librarySettingsDialog" class="admin-dialog library-dialog" aria-labelledby="librarySettingsTitle">
       <div class="missing-dialog-heading"><div><p class="eyebrow">YTTM ADMIN</p><h2 id="librarySettingsTitle">Library Reservation Check</h2></div><button type="button" class="dialog-close" id="closeLibrarySettings" aria-label="Close library booking">×</button></div>
@@ -355,31 +291,13 @@
     </dialog>
     <dialog id="attendeesDialog" class="people-dialog" aria-labelledby="attendeesTitle">
       <div class="missing-dialog-heading"><h2 id="attendeesTitle">Attendees</h2><button id="closeAttendeesDialog" class="dialog-close" type="button" aria-label="참석자 명단 닫기">&times;</button></div>
-      <form id="attendeeForm" class="attendee-form">
-        <label class="sr-only" for="attendeeName">참석자 이름</label><input id="attendeeName" placeholder="이름" maxlength="80" autocomplete="off" required>
-        <button id="newAttendeeGuest" class="people-icon guest-toggle" type="button" aria-label="Member. Change to Guest" aria-pressed="false" title="Change to Guest">Member</button>
-        <button class="people-icon attendee-add" type="submit" aria-label="참석자 추가" title="추가">＋</button>
-      </form>
       <p id="attendeesStatus" class="people-status" role="status"></p>
       <ul id="attendeesList" class="attendees-list"></ul>
     </dialog>
-    <dialog id="assignmentStatusDialog" class="people-dialog assignment-status-dialog" aria-labelledby="assignmentStatusTitle">
-      <div class="missing-dialog-heading"><h2 id="assignmentStatusTitle"></h2><button id="closeAssignmentStatusDialog" class="dialog-close" type="button" aria-label="예정 배정 닫기">&times;</button></div>
-      <div class="status-options"><button type="button" data-status-action="confirm">✓ Confirm assignment</button><button type="button" data-status-action="delete">× Remove assignment</button></div>
-      <p id="assignmentStatusMessage" class="people-status" role="status"></p>
-    </dialog>
-    <dialog id="roleSuggestionsDialog" class="people-dialog" aria-labelledby="roleSuggestionsTitle">
-      <div class="missing-dialog-heading"><h2 id="roleSuggestionsTitle">Suggested roles</h2><button id="closeRoleSuggestionsDialog" type="button" class="dialog-close" aria-label="Close suggestions">&times;</button></div>
-      <div id="roleSuggestionsList" class="suggestions-list"></div>
-      <p id="roleSuggestionsStatus" class="people-status" role="status"></p>
-      <div class="meeting-edit-actions"><button id="applyRoleSuggestions" type="button" class="primary-button">Add tentative assignments</button></div>
-    </dialog>
     <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
-    <script src="./config.js?v=20261108-library-supabase"></script>
-    <script src="./draft-sync.js?v=20261027-11" defer></script>
+    <script src="./config.js?v=20261128-read-only"></script>
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
-    <script src="./meeting-people.js?v=20261027-11" defer></script>
-    <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261121-booking-meeting-slide" defer></script>
+    <script src="./meeting-people.js?v=20261128-read-only" defer></script>
+    <script src="./app.js?v=20261128-read-only" defer></script>
   </body>
 </html>

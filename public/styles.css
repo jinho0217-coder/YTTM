@@ -903,3 +903,7 @@ footer p { text-align: right; }
 .library-account-slots [data-occupied="true"],
 #libraryAutoSwitch[aria-checked="true"] { color: #195b3d; background: #e2f5e9; border-color: #23704b; }
 #librarySettingsDialog [hidden] { display: none; }
+
+.schedule-source-link { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: transparent; color: var(--white); font-size: 11px; font-weight: 800; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.schedule-source-link:hover { background: rgba(255,255,255,.1); }
+.tentative-icon { cursor: default; pointer-events: none; }
