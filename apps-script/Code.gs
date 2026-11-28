@@ -441,8 +441,10 @@ function sheetLiteral(value) {
 
 function recordApprovedTableTopics(drafts, writes) {
   writes.filter(item => item.section === "tableTopics").forEach(({ meetingDate, label, value }) => {
-    const meetings = drafts.tableTopicSpeakers ||= {};
-    (meetings[meetingDate] ||= {})[label] = value;
+    if (!drafts.tableTopicSpeakers) drafts.tableTopicSpeakers = {};
+    const meetings = drafts.tableTopicSpeakers;
+    if (!meetings[meetingDate]) meetings[meetingDate] = {};
+    meetings[meetingDate][label] = value;
   });
 }
 
