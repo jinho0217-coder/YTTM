@@ -418,9 +418,45 @@ function requirePin(pin) {
   if (!result.ok) throw new Error(result.error);
 }
 
+function tableTopicSpeakerRange(year) {
+  if (!["2026", "2027"].includes(year)) throw new Error("Choose a supported agenda year.");
+  const sheetName = year === "2026" ? AGENDA_SHEET : "27_Agenda";
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  if (!sheet) throw new Error(`${sheetName} was not found.`);
+  return { sheetName, range: sheet.getRange("N42:N49") };
+}
+
+function saveTableTopicSpeakers(request) {
+  const validNames = names => Array.isArray(names) && names.length === 8 &&
+    names.every(name => typeof name === "string" && name.length <= 100 && !/[\r\n]/.test(name));
+  if (!validNames(request.names) || !Array.isArray(request.previousNames) || request.previousNames.length !== 8 ||
+      !request.previousNames.every(name => typeof name === "string")) throw new Error("Enter up to eight speaker names, one per slot.");
+  requirePin(request.pin);
+  const { sheetName, range } = tableTopicSpeakerRange(request.year);
+  const names = request.names.map(name => name.trim());
+  const current = range.getDisplayValues().map(([name]) => name);
+  if (current.some((name, index) => name !== request.previousNames[index] && name !== names[index])) {
+    throw new Error("Speaker names changed in Google Sheets. Reopen this form to review the latest list.");
+  }
+  if (range.getFormulas().some(([formula]) => formula)) throw new Error("The speaker range contains a formula. Review it in Google Sheets.");
+  if (current.some((name, index) => name !== names[index])) {
+    range.setValues(names.map(name => [name.startsWith("=") || name.startsWith("'") ? "'" + name : name]));
+    SpreadsheetApp.flush();
+  }
+  return operationResponse(request, { ok: true, sheetName, names });
+}
+
 function doGet(event) {
   const action = String(event?.parameter?.action || "getDrafts");
   const callback = String(event?.parameter?.callback || "");
+  if (action === "getTableTopicSpeakers") {
+    try {
+      const { sheetName, range } = tableTopicSpeakerRange(event.parameter.year);
+      return webResponse({ ok: true, sheetName, names: range.getDisplayValues().map(([name]) => name) }, callback);
+    } catch (error) {
+      return webResponse({ ok: false, error: error.message || String(error) }, callback);
+    }
+  }
   if (action === "storageHealth") {
     try {
       const state = primaryRequest("yttm_primary_state?select=revision&limit=1");
@@ -516,6 +552,7 @@ function doPost(event) {
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
+    if (request.action === "saveTableTopicSpeakers") return saveTableTopicSpeakers(request);
     if (primaryConfigured() && ["saveDraft", "applyDrafts", "reconcileSheet"].includes(request.action) &&
         /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
       const [receipt] = primaryRequest("yttm_save_receipts?request_id=eq." + request.requestId + "&select=result");

@@ -432,6 +432,12 @@ td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align:
 .agenda-dialog-details .agenda-table:not(.speech-agenda-table) th:first-child { width: 60%; }
 .agenda-dialog-details .agenda-table:not(.speech-agenda-table) th:last-child { width: 40%; }
 .agenda-dialog-details .agenda-note { margin: 16px 0 0; }
+.table-topic-speaker-form { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.table-topic-speaker-form h3 { margin: 0 0 4px; }
+.table-topic-sheet-location { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.table-topic-speaker-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.table-topic-speaker-fields .meeting-edit-field input { border-right: 1px solid var(--line); }
+.table-topic-speaker-fields .primary-button { justify-self: start; align-self: end; }
 .agenda-dialog-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 14px 26px; background: rgba(251,248,242,.97); border-top: 1px solid var(--line); }
 .theme-detail-value { padding: 22px; font-family: Georgia, serif; font-size: 24px; line-height: 1.4; background: var(--white); border-left: 4px solid var(--blue); }
 .theme-detail-row { display: flex; align-items: center; gap: 12px; padding-right: 13px; background: var(--white); border-left: 4px solid var(--blue); }

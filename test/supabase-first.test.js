@@ -66,6 +66,30 @@ test("2027 meetings follow 2026 and join role values by their row labels", () =>
   ]);
 });
 
+test("Table Topics speakers save only to the selected agenda range and reject stale edits", () => {
+  const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
+  let names = ["Previous", "", "", "", "", "", "", ""];
+  const context = vm.createContext({ SpreadsheetApp: {
+    flush() {},
+    openById: () => ({ getSheetByName: name => {
+      assert.equal(name, "27_Agenda");
+      return { getRange: range => {
+        assert.equal(range, "N42:N49");
+        return { getDisplayValues: () => names.map(value => [value]), getFormulas: () => [],
+          setValues: rows => { names = Array.from(rows, ([value]) => value); } };
+      } };
+    } }),
+  } });
+  vm.runInContext(backend, context);
+  vm.runInContext(`requirePin = pin => { if (pin !== "test PIN") throw new Error("Invalid PIN"); };
+    operationResponse = (request, result) => result;`, context);
+  const request = { year: "2027", pin: "test PIN", previousNames: names.slice(), names: ["New name", "", "", "", "", "", "", ""] };
+  assert.throws(() => context.saveTableTopicSpeakers({ ...request, pin: "wrong" }), /Invalid PIN/);
+  assert.equal(context.saveTableTopicSpeakers(request).ok, true);
+  assert.deepEqual(names, request.names);
+  assert.throws(() => context.saveTableTopicSpeakers({ ...request, names: ["Other", ...names.slice(1)] }), /changed in Google Sheets/);
+});
+
 test("an approved batch routes identical column numbers to their own year's roles tab", () => {
   const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
   const values = new Map();
