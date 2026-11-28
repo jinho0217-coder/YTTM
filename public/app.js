@@ -297,7 +297,6 @@ function setMeetingOffset(offset, updateHash = true, scrollToTop = false) {
   state.meetingOffset = nextOffset;
   state.meetingView = nextOffset < 0 ? "past" : nextOffset > 0 ? "next" : "coming";
   updateMeetingArrowControls();
-  document.getElementById("comingMeetingButton").setAttribute("aria-current", String(nextOffset === 0));
   document.querySelectorAll("[data-tab-panel]").forEach(panel => {
     panel.hidden = panel.dataset.tabPanel !== "week";
   });
@@ -2023,11 +2022,15 @@ const meetingPanel = document.getElementById("this-week");
 let suppressArrowClickUntil = 0;
 
 function updateMeetingArrowControls() {
-  if (!state.model) return;
-  const currentIndex = state.model.comingMeetingIndex + state.meetingOffset;
+  const { model, meetingOffset } = state;
+  document.getElementById("comingMeetingButton").setAttribute("aria-current", String(meetingOffset === 0));
   document.querySelectorAll("[data-meeting-arrow]").forEach(button => {
     const direction = Number(button.dataset.meetingArrow);
-    button.disabled = direction < 0 ? currentIndex <= 0 : currentIndex >= state.model.regularMeetings.length - 1;
+    button.setAttribute("aria-current", String(direction === Math.sign(meetingOffset)));
+    if (model) {
+      const currentIndex = model.comingMeetingIndex + meetingOffset;
+      button.disabled = direction < 0 ? currentIndex <= 0 : currentIndex >= model.regularMeetings.length - 1;
+    }
   });
 }
 

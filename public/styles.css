@@ -130,7 +130,8 @@ a { color: inherit; }
 .dashboard-tabs button:hover { color: var(--red); background: rgba(159,36,53,.06); }
 .dashboard-tabs button[aria-current="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
 .dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 18px; }
-.dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
+.dashboard-tabs .meeting-arrow:disabled { cursor: not-allowed; }
+.dashboard-tabs .meeting-arrow:disabled:not([aria-current="true"]) { color: var(--muted); opacity: .35; }
 @media (min-width: 621px) {
   .dashboard-tabs { align-items: center; gap: 32px; }
   .dashboard-tabs button,
