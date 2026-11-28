@@ -1,7 +1,10 @@
-const state = { model: null, member: "all", role: "all", meetingView: "coming", meetingOffset: 0 };
+const state = { model: null, member: "all", role: "all", meetingView: "coming", meetingOffset: 0, sharedDrafts: { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} }, sheetBaseValues: {} };
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
+const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
 const LIBRARY_ENDPOINT = clean(window.YTTM_CONFIG?.libraryEndpoint);
+const THEME_EDIT_FIELDS = ["Theme", "Theme Question", "Word of the day", "Quote of the day"];
+const SPECIAL_EDIT_FIELDS = ["Special Event"];
 const AWARD_EDIT_FIELDS = ["Best Speaker", "Best evaluator", "Best table topic speaker"];
 const AWARD_DISPLAY_LABELS = {
   "Best Speaker": "Best Speaker",
@@ -26,31 +29,126 @@ async function libraryRequest(payload) {
   return result;
 }
 
-async function fetchDashboardData() {
-  const { snapshotsEndpoint, publishableKey } = window.YTTM_CONFIG;
-  try {
-    const response = await fetch(snapshotsEndpoint, {
-      headers: { apikey: publishableKey },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error("Supabase returned " + response.status);
-    const snapshots = await response.json();
-    const roles = snapshots.find(sheet => sheet.sheet_name === "26_Roles");
-    const agenda = snapshots.find(sheet => sheet.sheet_name === "26_Agenda");
-    const syncedAt = Date.parse(roles?.synced_at);
-    if (!roles?.csv || !agenda?.csv || roles.synced_at !== agenda.synced_at ||
-        !Number.isFinite(syncedAt) || Date.now() - syncedAt > 15 * 60 * 1000) {
-      throw new Error("Supabase snapshots are incomplete or stale.");
+async function apiRequest(payload) {
+  if (!WRITE_ENDPOINT) throw new Error("The shared draft service is not configured.");
+  const requestId = payload.requestId || newSaveRequestId();
+  await fetch(WRITE_ENDPOINT, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ ...payload, requestId }),
+  });
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500));
+    const result = await jsonpRequest("status", { requestId });
+    if (!result.pending) {
+      if (!result.ok) {
+        const error = new Error(result.error || "The request was rejected.");
+        error.result = result;
+        throw error;
+      }
+      return result;
     }
-    return { rolesCsv: roles.csv, agendaCsv: agenda.csv, fetchedAt: roles.synced_at, source: SHEET_SOURCE, provider: "Supabase" };
-  } catch (error) {
-    console.warn("Supabase snapshot unavailable. Loading Google Sheets.", error);
-    return fetchPublicSheets();
   }
+  throw new Error("The shared draft service did not confirm the request.");
+}
+
+function jsonpRequest(action, parameters = {}) {
+  if (!WRITE_ENDPOINT) return Promise.reject(new Error("The shared draft service is not configured."));
+  return new Promise((resolve, reject) => {
+    const callback = `yttmJsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const timeout = setTimeout(() => finish(new Error("The shared draft service timed out.")), 10000);
+    const finish = (error, value) => {
+      clearTimeout(timeout);
+      delete window[callback];
+      script.remove();
+      if (error) reject(error); else resolve(value);
+    };
+    window[callback] = value => finish(null, value);
+    script.onerror = () => finish(new Error("Unable to reach the shared draft service."));
+    const query = new URLSearchParams({ action, callback, _: Date.now(), ...parameters });
+    script.src = `${WRITE_ENDPOINT}?${query}`;
+    document.head.appendChild(script);
+  });
+}
+
+async function fetchSharedDrafts() {
+  if (!WRITE_ENDPOINT) return { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} };
+  const result = await jsonpRequest("getDrafts");
+  if (!result.ok) throw new Error(result.error || "Unable to load shared drafts.");
+  return result.drafts || { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} };
+}
+
+function sharedDraftEntries() {
+  return Object.entries(state.sharedDrafts.meetings || {}).flatMap(([meetingDate, sections]) =>
+    Object.entries(sections || {}).flatMap(([section, updates]) =>
+      Object.entries(updates || {}).map(([label, value]) => ({ meetingDate, section, label, value }))));
+}
+
+function renderDraftSyncState() {
+  const entries = sharedDraftEntries();
+  const badge = document.getElementById("draftSyncBadge");
+  const button = document.getElementById("applySheetsButton");
+  const pending = entries.length > 0;
+  badge.className = `draft-sync-badge ${pending ? "pending" : "synced"}`;
+  badge.textContent = pending ? `Shared draft pending · ${entries.length}` : "Google Sheet synced";
+  button.classList.toggle("pending", pending);
+  button.disabled = !pending;
+  button.textContent = pending ? `Apply ${entries.length} change${entries.length === 1 ? "" : "s"}` : "Google Sheet up to date";
+  renderLocalSaveState();
+  button.title = button.textContent;
+}
+
+function applySharedDraftsToRows(rolesRows, drafts) {
+  const dateColumns = new Map((rolesRows[0] || []).map((value, col) => [clean(value), col]));
+  const rows = rowMap(rolesRows);
+  Object.entries(drafts.meetings || {}).forEach(([meetingDate, sections]) => {
+    const col = dateColumns.get(meetingDate);
+    if (col == null) return;
+    Object.values(sections || {}).forEach(updates => {
+      Object.entries(updates || {}).forEach(([label, value]) => {
+        const target = rows.get(label)?.row;
+        if (target) target[col] = value;
+        else if (label === "Attendees") {
+          const row = [label];
+          row[col] = value;
+          rolesRows.push(row);
+          rows.set(label, { row });
+        }
+      });
+    });
+  });
+}
+
+function captureSheetBaseValues(rolesRows) {
+  const dates = rolesRows[0] || [];
+  const values = {};
+  rolesRows.slice(1).forEach(row => {
+    const label = clean(row[0]);
+    if (!label) return;
+    for (let col = 1; col < dates.length; col += 1) {
+      const meetingDate = clean(dates[col]);
+      if (!meetingDate) continue;
+      values[meetingDate] ||= {};
+      values[meetingDate][label] = clean(row[col]);
+    }
+  });
+  state.sheetBaseValues = values;
 }
 
 async function fetchPublicSheets() {
+  if (WRITE_ENDPOINT) {
+    try {
+      const livePayload = await jsonpRequest("getSheets");
+      if (livePayload?.ok && typeof livePayload.rolesCsv === "string" && typeof livePayload.agendaCsv === "string") {
+        return livePayload;
+      }
+      if (livePayload?.error) console.warn("Live sheet endpoint returned an error.", livePayload.error);
+    } catch (error) {
+      console.warn("Live sheet endpoint unavailable; using the public read-only sheets endpoint.", error);
+    }
+  }
   const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`;
   const stamp = Date.now();
   const [rolesResponse, agendaResponse] = await Promise.all([
@@ -65,7 +163,6 @@ async function fetchPublicSheets() {
     agendaCsv: await agendaResponse.text(),
     fetchedAt: new Date().toISOString(),
     source: SHEET_SOURCE,
-    provider: "Google Sheets",
   };
 }
 
@@ -215,6 +312,7 @@ function buildModel(rolesRows, agendaRows) {
     return anchors.filter(label => confirmedAssignment(rowsByLabel.get(label)?.row[c.col])).length >= 3;
   });
   const completedSet = new Set(completedColumns.map(c => c.col));
+  const previousEditableMeeting = columns.filter(c => c.date < meetingReferenceDate && !c.noMeeting).at(-1) || null;
   const upcomingMeetings = columns.filter(c => c.date >= meetingReferenceDate && !c.noMeeting);
   const comingMeeting = upcomingMeetings[0] || columns.filter(c => !c.noMeeting).at(-1);
   const followingMeeting = upcomingMeetings[1] || null;
@@ -299,7 +397,7 @@ function buildModel(rolesRows, agendaRows) {
   });
 
   return {
-    today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, comingMeeting, followingMeeting,
+    today, rowsByLabel, columns, regularMeetings, comingMeetingIndex, completedColumns, completedSet, previousEditableMeeting, comingMeeting, followingMeeting,
     assignments, searchAssignments, speeches, members: [...members.values()], agenda: extractAgenda(agendaRows),
   };
 }
@@ -424,10 +522,25 @@ function renderCompactAgenda(model, meeting) {
 }
 
 function showAgendaDetails(item) {
+  configureDetailsEditor();
   setText("agendaDialogEyebrow", item.time);
   setText("agendaDialogTitle", item.title);
   document.getElementById("agendaDialogDetails").innerHTML = agendaDetailHtml(item);
   document.getElementById("agendaDetailsDialog").showModal();
+}
+
+function configureDetailsEditor(section = "", field = "") {
+  const actions = document.getElementById("agendaDialogActions");
+  const button = document.getElementById("agendaDialogEditButton");
+  const editable = Boolean(section) && canEditActiveMeeting();
+  if (!actions.contains(button)) actions.appendChild(button);
+  button.dataset.editSection = section;
+  button.dataset.editField = field;
+  const inlineSlot = document.querySelector("#agendaDialogDetails [data-inline-edit-slot]");
+  if (editable && inlineSlot) inlineSlot.appendChild(button);
+  actions.classList.toggle("hidden", !editable || Boolean(inlineSlot));
+  button.classList.toggle("inline-detail-edit", Boolean(inlineSlot));
+  button.hidden = !editable;
 }
 
 const ROLE_AGENDA_DUTIES = {
@@ -473,27 +586,81 @@ const ROLE_AGENDA_DUTIES = {
 };
 
 function showRoleDetails(assignment) {
+  configureDetailsEditor();
   const duties = ROLE_AGENDA_DUTIES[assignment.role] || [["Agenda", "Support the meeting according to the Toastmaster's instructions."]];
   setText("agendaDialogEyebrow", "ROLE RESPONSIBILITIES");
   setText("agendaDialogTitle", assignment.role);
   document.getElementById("agendaDialogDetails").innerHTML = `
-    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}${guestRoleIcon(assignment.rawValue)}</strong></p></div>
+    <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}${guestRoleIcon(assignment.rawValue)}</strong></p><span data-inline-edit-slot></span></div>
     <ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
+  configureDetailsEditor("roles", assignment.role);
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
 function showThemeDetails(label, value) {
+  configureDetailsEditor();
   setText("agendaDialogEyebrow", "MEETING THEME");
   setText("agendaDialogTitle", label);
-  document.getElementById("agendaDialogDetails").innerHTML = `<div class="theme-detail-row"><div class="theme-detail-value ${value ? "" : "pending"}">${escapeHtml(value || "Pending")}</div></div>`;
+  document.getElementById("agendaDialogDetails").innerHTML = `<div class="theme-detail-row"><div class="theme-detail-value ${value ? "" : "pending"}">${escapeHtml(value || "Pending")}</div><span data-inline-edit-slot></span></div>`;
+  configureDetailsEditor("theme", label);
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
 function showAwardDetails(label, value) {
+  configureDetailsEditor();
   setText("agendaDialogEyebrow", "MEETING AWARD");
   setText("agendaDialogTitle", AWARD_DISPLAY_LABELS[label] || label);
-  document.getElementById("agendaDialogDetails").innerHTML = `<div class="award-detail-row"><div class="award-detail-value ${value ? "" : "pending"}">${escapeHtml(value || "Not selected")}</div></div>`;
+  document.getElementById("agendaDialogDetails").innerHTML = `<div class="award-detail-row"><div class="award-detail-value ${value ? "" : "pending"}">${escapeHtml(value || "Not selected")}</div><span data-inline-edit-slot></span></div>`;
+  configureDetailsEditor("awards", label);
   document.getElementById("agendaDetailsDialog").showModal();
+}
+
+let suppressLongPressClickUntil = 0;
+function addMobileLongPress(element, openEditor) {
+  let timer = null;
+  let triggered = false;
+  let startX = 0;
+  let startY = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    triggered = false;
+    element.classList.remove("long-pressing");
+  };
+  element.addEventListener("touchstart", event => {
+    if (event.touches.length !== 1 || !canEditActiveMeeting() || window.innerWidth > 700) return;
+    const touch = event.touches[0];
+    triggered = false;
+    startX = touch.clientX;
+    startY = touch.clientY;
+    timer = window.setTimeout(() => {
+      timer = null;
+      triggered = true;
+      element.classList.add("long-pressing");
+      navigator.vibrate?.(35);
+    }, 480);
+    window.setTimeout(() => { if (timer) element.classList.add("long-pressing"); }, 260);
+  }, { passive: true });
+  element.addEventListener("touchmove", event => {
+    if ((!timer && !triggered) || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 10) cancel();
+  }, { passive: true });
+  element.addEventListener("touchend", () => {
+    const shouldOpen = triggered;
+    cancel();
+    if (!shouldOpen) return;
+    suppressLongPressClickUntil = Date.now() + 700;
+    window.getSelection()?.removeAllRanges();
+    window.setTimeout(() => {
+      openEditor();
+      window.getSelection()?.removeAllRanges();
+    }, 0);
+  }, { passive: true });
+  element.addEventListener("touchcancel", cancel, { passive: true });
+  element.addEventListener("contextmenu", event => {
+    if (window.innerWidth <= 700) event.preventDefault();
+  });
 }
 
 function activeMeeting() {
@@ -598,6 +765,254 @@ function initializeLibrarySettings() {
     credentialForm.reset();
     update("save", { slot, username, password });
   };
+}
+
+function canEditActiveMeeting() {
+  const meeting = activeMeeting();
+  return Boolean(meeting) && (meeting.date >= meetingReferenceDateKst() || meeting.col === state.model.previousEditableMeeting?.col);
+}
+
+function editableValue(meeting, label) {
+  return clean(state.model.rowsByLabel.get(label)?.row[meeting.col]);
+}
+
+function editFieldHtml(meeting, label) {
+  const value = editableValue(meeting, label);
+  const assignment = isAssignmentField(label);
+  const inputValue = assignment ? assignmentPersonName(value) : value;
+  const id = `edit-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return `<div class="meeting-edit-field"><label for="${id}">${escapeHtml(label)}</label><div><input id="${id}" name="${escapeHtml(label)}" data-edit-field="${escapeHtml(label)}" data-initial-value="${escapeHtml(value)}" value="${escapeHtml(inputValue)}" maxlength="${assignment ? 498 : 500}" autocomplete="off">${assignment ? `<button type="button" class="tentative-toggle" data-tentative-field="${escapeHtml(label)}" aria-pressed="${isTentative(value)}" title="예정 배정" aria-label="${escapeHtml(label)} 예정 배정">◷</button>` : ""}<button type="button" class="clear-field-button" data-clear-field="${escapeHtml(label)}" aria-label="Clear ${escapeHtml(label)}">Clear</button></div></div>`;
+}
+
+let dashboardLoadVersion = 0;
+
+function activeEditApiSection() {
+  return state.editSection === "awards" ? "roles" : state.editSection;
+}
+
+function openMeetingEditor(section, field = "", speechSlot = null, originItem = null) {
+  const meeting = activeMeeting();
+  if (!meeting || !canEditActiveMeeting()) return;
+  state.editSection = section;
+  state.editMeeting = meeting;
+  state.editFieldVersions = localFieldVersions();
+  state.editOriginSpeechItem = originItem;
+  const titles = { theme: "Meeting theme", special: "Special Event", roles: "Role assignments", speeches: "Prepared speeches", awards: "Meeting awards" };
+  setText("meetingEditEyebrow", `${formatMeetingDate(meeting.date)} MEETING · ${meeting.meetingNo || ""}`);
+  const displayField = section === "awards" && field ? (AWARD_DISPLAY_LABELS[field] || field) : field;
+  setText("meetingEditTitle", `Edit ${displayField || (speechSlot ? `Speaker ${speechSlot} speech` : titles[section])}`);
+  let content = "";
+  if (section === "theme") {
+    const fields = field && THEME_EDIT_FIELDS.includes(field) ? [field] : THEME_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "special") {
+    const fields = field && SPECIAL_EDIT_FIELDS.includes(field) ? [field] : SPECIAL_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "roles") {
+    const fields = field && ROLE_EDIT_FIELDS.includes(field) ? [field] : ROLE_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "awards") {
+    const fields = field && AWARD_EDIT_FIELDS.includes(field) ? [field] : AWARD_EDIT_FIELDS;
+    content = fields.map(label => editFieldHtml(meeting, label)).join("");
+  }
+  if (section === "speeches") {
+    const slots = speechSlot ? [Number(speechSlot)] : [1, 2, 3, 4];
+    content = slots.map(number => {
+      const speechFields = [`Speaker ${number}`, `Project ${number}`, `Title ${number}`, `Time ${number}`, `Evaluator ${number}`];
+      const visibleFields = field && speechFields.includes(field) ? [field] : speechFields;
+      return `<fieldset class="speech-edit-group"><legend>Speaker ${number}</legend>${visibleFields.map(label => editFieldHtml(meeting, label)).join("")}</fieldset>`;
+    }).join("");
+  }
+  document.getElementById("meetingEditFields").innerHTML = content;
+  setText("meetingEditStatus", WRITE_ENDPOINT ? "Changes appear immediately and sync to the shared draft in the background." : "Shared draft saving is not configured.");
+  document.getElementById("saveMeetingEdit").disabled = true;
+  document.getElementById("meetingEditDialog").showModal();
+  updateMeetingEditorState();
+}
+
+function updateMeetingEditorState() {
+  const inputs = [...document.querySelectorAll("#meetingEditFields [data-edit-field]:not(:disabled)")];
+  const changed = inputs.some(input => (isAssignmentField(input.dataset.editField) ? assignmentInputValue(input) : input.value.trim()) !== input.dataset.initialValue);
+  document.getElementById("saveMeetingEdit").disabled = !WRITE_ENDPOINT || !changed;
+}
+
+async function saveMeetingEditor(event) {
+  event.preventDefault();
+  if (!document.getElementById("meetingEditDialog").open || !state.editMeeting || !canEditActiveMeeting()) return;
+  const status = document.getElementById("meetingEditStatus");
+  if (!WRITE_ENDPOINT) {
+    status.className = "meeting-edit-status error";
+    status.textContent = "The shared draft service is not connected.";
+    return;
+  }
+  const updates = Object.fromEntries([...document.querySelectorAll("#meetingEditFields [data-edit-field]")]
+    .map(input => [input.dataset.editField, isAssignmentField(input.dataset.editField) ? assignmentInputValue(input) : input.value.trim(), input.dataset.initialValue])
+    .filter(([, value, initial]) => value !== initial)
+    .map(([label, value]) => [label, value]));
+  const meetingDate = sheetDateValue(state.editMeeting.date);
+  if (!Object.keys(updates).length) return;
+  const apiSection = activeEditApiSection();
+  const baseValues = Object.fromEntries(Object.keys(updates).map(label => [label, state.sheetBaseValues[meetingDate]?.[label] || ""]));
+  const fieldVersions = Object.fromEntries(Object.keys(updates).map(label => [label, Number(state.editFieldVersions?.[`${meetingDate}|${apiSection}|${label}`] || 0)]));
+  try {
+    enqueueDraftSave({
+      action: "saveDraft",
+      meetingDate,
+      section: apiSection,
+      updates,
+      baseValues,
+      fieldVersions,
+    });
+    dashboardLoadVersion += 1;
+    if (state.editOriginSpeechItem) {
+      const editedField = Object.keys(updates)[0];
+      const value = updates[editedField] || "Pending";
+      state.editOriginSpeechItem.querySelector("strong").textContent = value;
+      state.editOriginSpeechItem.classList.toggle("pending", value === "Pending");
+    }
+    closeMeetingEditor();
+    renderSheetPayload(state.sheetPayload);
+    void flushLocalSaves();
+  } catch (error) {
+    status.className = "meeting-edit-status error";
+    status.textContent = `Unable to save on this device: ${error.message}`;
+  }
+}
+
+function openAdminApplyDialog() {
+  if (localSaves.length) return;
+  const entries = sharedDraftEntries();
+  if (!entries.length) return;
+  state.adminApplyEntries = entries;
+  const meetings = new Set(entries.map(entry => entry.meetingDate)).size;
+  setText("adminApplySummary", `${entries.length} shared change${entries.length === 1 ? "" : "s"} across ${meetings} meeting${meetings === 1 ? "" : "s"} will be written to Google Sheets.`);
+  const uniqueLabels = [...new Set(entries.map(entry => entry.label))];
+  const compactLabels = uniqueLabels.slice(0, 2).join(", ");
+  const remaining = Math.max(0, uniqueLabels.length - 2);
+  setText("adminApplyCompact", `${compactLabels}${remaining ? ` +${remaining}` : ""}`);
+  document.getElementById("adminApplyList").innerHTML = entries.map((entry, index) => `
+    <label class="admin-apply-item">
+      <input type="checkbox" data-apply-change="${index}" checked>
+      <span class="admin-apply-toggle" aria-hidden="true"></span>
+      <time>${escapeHtml(entry.meetingDate)}</time>
+      <strong>${escapeHtml(entry.section)} · ${escapeHtml(entry.label)}</strong>
+      <span class="admin-apply-value">${escapeHtml(entry.value || "(clear value)")}</span>
+    </label>`).join("");
+  document.getElementById("adminApplyDetails").open = true;
+  const status = document.getElementById("adminApplyStatus");
+  status.className = "meeting-edit-status";
+  status.textContent = "Selected changes will be applied. Unselected changes will be discarded and restored from Google Sheets.";
+  document.getElementById("adminApplyPin").value = "";
+  const applyButton = document.getElementById("confirmApplySheets");
+  applyButton.dataset.force = "";
+  updateAdminApplySelection();
+  document.getElementById("adminApplyDialog").showModal();
+}
+
+function selectedAdminApplyEntries() {
+  return [...document.querySelectorAll("#adminApplyList [data-apply-change]:checked")]
+    .map(input => state.adminApplyEntries?.[Number(input.dataset.applyChange)])
+    .filter(Boolean);
+}
+
+function updateAdminApplySelection() {
+  const total = state.adminApplyEntries?.length || 0;
+  const selected = selectedAdminApplyEntries().length;
+  const discarded = total - selected;
+  setText("adminApplyCompact", `${selected} of ${total} selected`);
+  setText("adminApplySummary", selected
+    ? `${selected} selected change${selected === 1 ? "" : "s"} will be written to Google Sheets.${discarded ? ` ${discarded} unselected change${discarded === 1 ? "" : "s"} will be discarded and restored from the sheet.` : ""}`
+    : `All ${total} pending change${total === 1 ? "" : "s"} will be discarded and restored from Google Sheets.`);
+  const button = document.getElementById("confirmApplySheets");
+  button.dataset.force = "";
+  button.textContent = selected ? `Apply ${selected} selected` : "Discard all changes";
+}
+
+async function applySharedDrafts(event) {
+  event.preventDefault();
+  if (localSaves.length) return;
+  const pin = document.getElementById("adminApplyPin").value;
+  const status = document.getElementById("adminApplyStatus");
+  const button = document.getElementById("confirmApplySheets");
+  const selectedEntries = selectedAdminApplyEntries();
+  if (!/^\d{4}$/.test(pin)) {
+    status.className = "meeting-edit-status error";
+    status.textContent = "Enter a 4-digit administrator PIN.";
+    return;
+  }
+  button.disabled = true;
+  status.className = "meeting-edit-status";
+  status.textContent = selectedEntries.length
+    ? `Applying ${selectedEntries.length} selected change${selectedEntries.length === 1 ? "" : "s"} to Google Sheets…`
+    : "Discarding all shared changes and reloading Google Sheets…";
+  try {
+    const selections = selectedEntries.map(({ meetingDate, section, label }) => ({ meetingDate, section, label }));
+    const result = await apiRequest({
+      action: "applyDrafts",
+      pin,
+      force: button.dataset.force === "true",
+      selectionMode: "explicit",
+      selections,
+      totalDrafts: state.adminApplyEntries?.length || 0,
+      draftRevision: state.sharedDrafts.revision,
+    });
+    status.className = "meeting-edit-status success";
+    status.textContent = `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
+    await loadDashboard(true);
+    setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
+  } catch (error) {
+    if (error.result?.code === "DRAFT_CHANGED") {
+      status.className = "meeting-edit-status warning";
+      status.textContent = "The pending changes changed before approval. Reloading the latest list from Google Sheets…";
+      await loadDashboard(true);
+      setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
+      return;
+    }
+    if (error.result?.code === "SHEET_CHANGED") {
+      const conflicts = error.result.conflicts || [];
+      status.className = "meeting-edit-status warning";
+      status.textContent = `Warning: Google Sheets changed after the draft was created (${conflicts.map(item => `${item.meetingDate} · ${item.label}`).join(", ")}). Review the sheet first, then click Apply anyway to overwrite it.`;
+      button.dataset.force = "true";
+      button.textContent = "Apply anyway";
+      return;
+    }
+    status.className = "meeting-edit-status error";
+    status.textContent = `Unable to apply: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function changeAdministratorPin(event) {
+  event.preventDefault();
+  const currentPin = document.getElementById("currentAdminPin").value;
+  const newPin = document.getElementById("newAdminPin").value;
+  const confirmPin = document.getElementById("confirmAdminPin").value;
+  const status = document.getElementById("changePinStatus");
+  if (!/^\d{4}$/.test(currentPin) || !/^\d{4}$/.test(newPin)) {
+    status.className = "meeting-edit-status error";
+    status.textContent = "Both PINs must contain exactly 4 digits.";
+    return;
+  }
+  if (newPin !== confirmPin) {
+    status.className = "meeting-edit-status error";
+    status.textContent = "The new PIN confirmation does not match.";
+    return;
+  }
+  status.className = "meeting-edit-status";
+  status.textContent = "Changing the administrator PIN…";
+  try {
+    await apiRequest({ action: "changePin", currentPin, newPin });
+    status.className = "meeting-edit-status success";
+    status.textContent = "Administrator PIN changed. You can also use the master PIN to reset it if it is lost.";
+    event.currentTarget.reset();
+  } catch (error) {
+    status.className = "meeting-edit-status error";
+    status.textContent = `Unable to change PIN: ${error.message}`;
+  }
 }
 
 function renderMeetingReadiness(model, meeting) {
@@ -915,7 +1330,17 @@ function renderThisWeek(model) {
   updateMeetingArrowControls();
   const meeting = activeMeeting();
   renderLibraryBooking(meeting);
+  document.getElementById('roleSuggestionsButton').disabled = !canEditActiveMeeting() || !meeting || meeting.noMeeting || !WRITE_ENDPOINT;
   renderAttendees();
+  document.querySelectorAll("[data-edit-section]").forEach(button => {
+    button.disabled = !canEditActiveMeeting();
+    button.title = state.model && meeting && meeting.date < meetingReferenceDateKst() && !canEditActiveMeeting() ? "Only the immediately previous meeting can be edited." : "";
+  });
+  const specialTab = document.querySelector("[data-special-event-tab]");
+  if (specialTab) {
+    specialTab.disabled = !canEditActiveMeeting();
+    specialTab.title = specialTab.disabled ? "Only the immediately previous meeting and future meetings can be edited." : "Edit Special Event for this meeting.";
+  }
   setText("meetingEyebrow", "YTTM MEETING SCHEDULE");
   if (!meeting) {
     setText("meetingTitle", "No Scheduled Meeting");
@@ -982,6 +1407,7 @@ function renderThisWeek(model) {
   meetingContext.querySelectorAll("[data-theme-index]").forEach(button => {
     const [label, value] = contextFields[Number(button.dataset.themeIndex)];
     button.addEventListener("click", () => showThemeDetails(label, value));
+    addMobileLongPress(button, () => openMeetingEditor("theme", label));
   });
 
   const assignments = [];
@@ -997,6 +1423,7 @@ function renderThisWeek(model) {
   assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
     const assignment = assignments[Number(button.dataset.assignmentIndex)];
     button.addEventListener("click", () => showRoleDetails(assignment));
+    addMobileLongPress(button, () => openMeetingEditor("roles", assignment.role));
   });
   renderCompactAgenda(model, meeting);
 
@@ -1024,7 +1451,8 @@ function renderThisWeek(model) {
     const speech = weekSpeeches[index];
     addTooltip(card, `${speech.speaker} · ${speech.title}\nProject: ${speech.project || "—"}\nTime: ${speech.time || "—"}\nEvaluator: ${speech.evaluator || "—"}`);
     const openDetails = () => showSpeechDetails(speech);
-    card.addEventListener("click", openDetails);
+    card.addEventListener("click", event => { if (!event.target.closest("[data-assignment-status]")) openDetails(); });
+    addMobileLongPress(card, () => openMeetingEditor("speeches", "", speech.slot));
     card.addEventListener("keydown", event => {
       if (event.target !== card) return;
       if (event.key === "Enter" || event.key === " ") {
@@ -1047,6 +1475,7 @@ function renderThisWeek(model) {
   awardsContainer.querySelectorAll("[data-award-index]").forEach(button => {
     const award = awards[Number(button.dataset.awardIndex)];
     button.addEventListener("click", () => showAwardDetails(award.label, award.winner));
+    addMobileLongPress(button, () => openMeetingEditor("awards", award.label));
   });
 }
 
@@ -1060,10 +1489,23 @@ function showSpeechDetails(speech) {
     ["Time", speech.time || "Pending"],
     ["Evaluator", `${isTentative(speech.evaluatorRaw) ? "◷ " : ""}${speech.evaluator || "Pending"}`],
   ];
+  const editable = canEditActiveMeeting();
   document.getElementById("speechDialogDetails").innerHTML = details.map(([label, value]) => {
-    const guestIcon = label === "Speaker" ? guestRoleIcon(speech.speakerRaw) : label === "Evaluator" ? guestRoleIcon(speech.evaluatorRaw) : "";
-    return `<div class="speech-detail-item ${String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}${guestIcon}</strong></div>`;
+    const tag = editable ? "button" : "div";
+    const field = `${label} ${speech.slot}`;
+    return `<${tag} ${editable ? `type="button" data-speech-field="${escapeHtml(field)}"` : ""} class="speech-detail-item ${value === "Pending" || String(value).includes("Pending") ? "pending" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}${label === "Speaker" ? guestRoleIcon(speech.speakerRaw) : label === "Evaluator" ? guestRoleIcon(speech.evaluatorRaw) : ""}</strong></${tag}>`;
   }).join("");
+  document.querySelectorAll("#speechDialogDetails [data-speech-field]").forEach(item => {
+    item.addEventListener("click", event => {
+      event.stopPropagation();
+      openMeetingEditor("speeches", item.dataset.speechField, speech.slot, item);
+    });
+  });
+  const editButton = document.getElementById("speechDialogEditButton");
+  const actions = document.getElementById("speechDialogActions");
+  editButton.dataset.speechSlot = speech.slot;
+  actions.classList.toggle("hidden", !editable);
+  editButton.disabled = !editable;
   document.getElementById("speechDetailsDialog").showModal();
 }
 
@@ -1074,13 +1516,42 @@ function render(model, meta) {
   setText("speechCount", model.speeches.length);
   setText("memberCount", model.members.length);
   document.getElementById("sheetLink").href = meta.source;
-  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · ${meta.provider}`);
+  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · Google Sheets`);
   renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
-let dashboardLoadVersion = 0;
+function renderSheetPayload(payload) {
+  const rolesRows = parseCsv(payload.rolesCsv);
+  applySharedDraftsToRows(rolesRows, state.sharedDrafts);
+  applyLocalSavesToRows(rolesRows);
+  confirmDueAssignmentRows(rolesRows);
+  state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
+  render(state.model, payload);
+  renderDraftSyncState();
+}
 
-async function loadDashboard() {
+function applyConfirmedDraft(result, meetingDate, section, updates) {
+  if (result.drafts) {
+    state.sharedDrafts = result.drafts;
+  } else {
+    // Older deployments return only field versions. Keep the old revision so
+    // polling still retrieves concurrent edits from other people.
+    const drafts = state.sharedDrafts;
+    drafts.meetings[meetingDate] ||= {};
+    drafts.meetings[meetingDate][section] ||= {};
+    Object.entries(updates).forEach(([label, value]) => {
+      if (value === (state.sheetBaseValues[meetingDate]?.[label] || "")) {
+        delete drafts.meetings[meetingDate][section][label];
+      } else {
+        drafts.meetings[meetingDate][section][label] = value;
+      }
+    });
+    drafts.fieldVersions = { ...drafts.fieldVersions, ...result.fieldVersions };
+  }
+  renderSheetPayload(state.sheetPayload);
+}
+
+async function loadDashboard(force = false) {
   const loadVersion = ++dashboardLoadVersion;
   const bookingWriteVersion = libraryBookingWriteVersion;
   loadingLibraryBookings = true;
@@ -1098,19 +1569,43 @@ async function loadDashboard() {
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
-  banner.className = "status-banner"; banner.textContent = "Loading the meeting schedule.";
+  banner.className = "status-banner"; banner.textContent = "Loading the latest data from Google Sheets.";
   try {
-    const payload = await fetchDashboardData();
+    const isGitHubPages = location.hostname.endsWith(".github.io");
+    let payload;
+    if (isGitHubPages) {
+      payload = await fetchPublicSheets();
+    } else {
+      try {
+        const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
+        const response = await fetch(endpoint, { cache: "no-store" });
+        if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
+        payload = await response.json();
+      } catch (serverError) {
+        console.warn("Local sheet proxy unavailable; using the public read-only sheets endpoint.", serverError);
+        payload = await fetchPublicSheets();
+      }
+    }
     const rolesRows = parseCsv(payload.rolesCsv);
     if (rolesRows.length < 10) throw new Error("26_Roles is empty.");
+    let drafts;
+    try {
+      drafts = await fetchSharedDrafts();
+    } catch (draftError) {
+      console.warn("Shared drafts are temporarily unavailable.", draftError);
+      drafts = state.sharedDrafts;
+    }
     if (loadVersion !== dashboardLoadVersion) return;
-    state.model = buildModel(rolesRows, parseCsv(payload.agendaCsv));
-    render(state.model, payload);
+    captureSheetBaseValues(rolesRows);
+    state.sheetPayload = payload;
+    state.sharedDrafts = drafts;
+    renderSheetPayload(payload);
     banner.className = "status-banner ready";
     const meeting = state.model.comingMeeting;
     banner.textContent = meeting
-      ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from ${payload.provider}.`
-      : `Updated the latest data from ${payload.provider}.`;
+      ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from Google Sheets.`
+      : "Updated the latest data from Google Sheets.";
+    void flushLocalSaves();
     return true;
   } catch (error) {
     if (loadVersion !== dashboardLoadVersion) return;
@@ -1142,7 +1637,7 @@ memberSearchInput.addEventListener("keydown", event => {
 document.getElementById("memberSearchResults").addEventListener("click", event => { const button = event.target.closest("[data-search-more]"); if (button) openSearchResultsDialog(button.dataset.searchMore); });
 document.getElementById("closeSearchResultsDialog").addEventListener("click", () => document.getElementById("searchResultsDialog").close());
 document.getElementById("searchResultsDialog").addEventListener("click", event => { if (event.target === event.currentTarget) event.currentTarget.close(); });
-document.getElementById("refreshButton").addEventListener("click", () => loadDashboard());
+document.getElementById("refreshButton").addEventListener("click", () => loadDashboard(true));
 
 const guestGuideDialog = document.getElementById("guestGuideDialog");
 const guestGuidePopup = createAnchoredDialog(guestGuideDialog, document.getElementById("guestGuideButton"));
@@ -1235,6 +1730,58 @@ rolePdfDialog.addEventListener("close", () => {
   rolePdfOriginalLink.removeAttribute("href");
 });
 
+let sharedDraftPollBusy = false;
+let displayedMeetingDay = sheetDateValue(todayKst());
+async function pollSharedDrafts() {
+  const currentDay = sheetDateValue(todayKst());
+  if (currentDay !== displayedMeetingDay && state.sheetPayload) {
+    displayedMeetingDay = currentDay;
+    renderSheetPayload(state.sheetPayload);
+  }
+  if (sharedDraftPollBusy || draftSyncBusy || document.hidden || !WRITE_ENDPOINT) return;
+  sharedDraftPollBusy = true;
+  try {
+    const latest = await fetchSharedDrafts();
+    if (draftSyncBusy) return;
+    if (Number(latest.revision || 0) === Number(state.sharedDrafts.revision || 0)) return;
+    const editDialog = document.getElementById("meetingEditDialog");
+    if (editDialog.open) {
+      const status = document.getElementById("meetingEditStatus");
+      status.className = "meeting-edit-status warning";
+      status.textContent = "Another person changed the shared schedule. Save will verify this field before accepting your entry.";
+      return;
+    }
+    await loadDashboard(true);
+    const banner = document.getElementById("statusBanner");
+    banner.className = "status-banner ready";
+    banner.textContent = "Another person's shared change was loaded automatically.";
+  } catch (error) {
+    console.warn("Unable to check for shared changes.", error);
+  } finally {
+    sharedDraftPollBusy = false;
+  }
+}
+setInterval(pollSharedDrafts, 10000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollSharedDrafts(); });
+const adminApplyDialog = document.getElementById("adminApplyDialog");
+const changePinDialog = document.getElementById("changePinDialog");
+function openPinSettings() {
+  document.getElementById("changePinForm").reset();
+  setText("changePinStatus", "Enter the current PIN, or use the master PIN if the administrator PIN was lost. The new PIN cannot match the master PIN.");
+  changePinDialog.showModal();
+}
+document.getElementById("applySheetsButton").addEventListener("click", openAdminApplyDialog);
+document.getElementById("adminSettingsButton").addEventListener("click", openPinSettings);
+document.getElementById("closeAdminApplyDialog").addEventListener("click", () => adminApplyDialog.close());
+document.getElementById("adminApplyForm").addEventListener("submit", applySharedDrafts);
+document.getElementById("adminApplyList").addEventListener("change", event => {
+  if (event.target.matches("[data-apply-change]")) updateAdminApplySelection();
+});
+document.getElementById("openChangePinDialog").addEventListener("click", openPinSettings);
+document.getElementById("closeChangePinDialog").addEventListener("click", () => changePinDialog.close());
+document.getElementById("changePinForm").addEventListener("submit", changeAdministratorPin);
+adminApplyDialog.addEventListener("click", event => { if (event.target === adminApplyDialog) adminApplyDialog.close(); });
+changePinDialog.addEventListener("click", event => { if (event.target === changePinDialog) changePinDialog.close(); });
 const missingDialog = document.getElementById("missingDetailsDialog");
 const readinessCard = document.getElementById("meetingReadiness");
 function openMissingDialog() {
@@ -1263,6 +1810,13 @@ speechDialog.addEventListener("click", event => {
   if (speechDialog.open) speechDialog.close();
 });
 speechDialog.addEventListener("close", hideTooltip);
+document.getElementById("speechDialogEditButton").addEventListener("click", event => {
+  event.stopPropagation();
+  const slot = Number(event.currentTarget.dataset.speechSlot);
+  speechDialog.close();
+  openMeetingEditor("speeches", "", slot);
+  requestAnimationFrame(() => document.querySelector("#meetingEditFields [data-edit-field]")?.focus());
+});
 const agendaDialog = document.getElementById("agendaDetailsDialog");
 document.getElementById("closeAgendaDialog").addEventListener("click", event => {
   event.stopPropagation();
@@ -1270,6 +1824,45 @@ document.getElementById("closeAgendaDialog").addEventListener("click", event => 
 });
 agendaDialog.addEventListener("click", event => {
   if (event.target === agendaDialog && agendaDialog.open) agendaDialog.close();
+});
+document.getElementById("agendaDialogEditButton").addEventListener("click", event => {
+  event.stopPropagation();
+  const button = event.currentTarget;
+  const section = button.dataset.editSection;
+  const field = button.dataset.editField;
+  agendaDialog.close();
+  openMeetingEditor(section, field);
+  requestAnimationFrame(() => document.querySelector("#meetingEditFields [data-edit-field]")?.focus());
+});
+const meetingEditDialog = document.getElementById("meetingEditDialog");
+document.querySelectorAll("[data-edit-section]").forEach(button => button.addEventListener("click", () => openMeetingEditor(button.dataset.editSection)));
+document.querySelector("[data-special-event-tab]")?.addEventListener("click", () => {
+  if (canEditActiveMeeting()) openMeetingEditor("special");
+});
+function closeMeetingEditor() {
+  meetingEditDialog.close();
+  state.editOriginSpeechItem = null;
+}
+document.getElementById("closeMeetingEditDialog").addEventListener("click", closeMeetingEditor);
+document.getElementById("cancelMeetingEdit").addEventListener("click", closeMeetingEditor);
+document.getElementById("retryLocalSaves").addEventListener("click", retryLocalSaves);
+document.getElementById("discardLocalSaves").addEventListener("click", discardLocalSaves);
+document.getElementById("meetingEditForm").addEventListener("submit", saveMeetingEditor);
+document.getElementById("meetingEditFields").addEventListener("input", event => {
+  resetTentativeAssignment(event.target);
+  updateMeetingEditorState();
+});
+document.getElementById("meetingEditFields").addEventListener("click", event => {
+  const toggle = event.target.closest("[data-tentative-field]");
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", toggle.getAttribute("aria-pressed") !== "true");
+    updateMeetingEditorState();
+    return;
+  }
+  const clearButton = event.target.closest("[data-clear-field]");
+  if (!clearButton) return;
+  const input = document.querySelector(`#meetingEditFields [data-edit-field="${CSS.escape(clearButton.dataset.clearField)}"]`);
+  if (input) { input.value = ""; resetTentativeAssignment(input); input.focus(); updateMeetingEditorState(); }
 });
 document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
   button.addEventListener("click", () => {
@@ -1465,14 +2058,15 @@ document.addEventListener("touchend", event => {
 }, { passive: true });
 document.addEventListener("touchcancel", () => { swipeStart = null; resetMeetingSwipe(true); }, { passive: true });
 document.addEventListener("click", event => {
-  if (Date.now() < suppressSwipeClickUntil) {
+  if (Date.now() < suppressSwipeClickUntil || Date.now() < suppressLongPressClickUntil) {
     event.preventDefault();
     event.stopPropagation();
   }
 }, true);
 const initialTab = ({ "#past-meeting": "past", "#coming-up": "coming", "#next-meeting": "next" })[location.hash] || "coming";
 initializeMeetingPeople();
+initializeRoleSuggestions();
 initializeLibrarySettings();
 initializeLibraryBookingMarks();
 setActiveTab(initialTab, false);
-loadDashboard();
+loadDashboard(false);

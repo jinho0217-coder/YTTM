@@ -4,7 +4,43 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 
+const frontend = fs.readFileSync(path.join(__dirname, "../public/app.js"), "utf8");
 const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
+
+function scriptPart(start, end) {
+  return frontend.slice(frontend.indexOf(start), frontend.indexOf(end));
+}
+
+function draftClient() {
+  const state = {
+    sharedDrafts: { revision: 3, meetings: {}, locks: {}, fieldVersions: {} },
+    sheetBaseValues: { "2099-01-01": { Theme: "Original" } },
+    sheetPayload: { rolesCsv: "cached sheet", agendaCsv: "cached agenda" },
+  };
+  const context = vm.createContext({ state, Date });
+  vm.runInContext(scriptPart("function applyConfirmedDraft(", "async function loadDashboard("), context);
+  vm.runInContext("function renderSheetPayload(payload) { state.renderedPayload = payload; }", context);
+  return { state, context };
+}
+
+test("confirmed snapshot renders from cached sheets with concurrent fields intact", () => {
+  const { state, context } = draftClient();
+  const drafts = { revision: 5, meetings: { "2099-01-01": { theme: { Theme: "Saved", "Theme Question": "Another person's edit" } } } };
+  context.applyConfirmedDraft({ drafts }, "2099-01-01", "theme", { Theme: "Saved" });
+  assert.equal(state.sharedDrafts, drafts);
+  assert.equal(state.renderedPayload, state.sheetPayload);
+});
+
+test("older deployment applies confirmed values but preserves revision for polling", () => {
+  const { state, context } = draftClient();
+  const key = "2099-01-01|theme|Theme";
+  context.applyConfirmedDraft({ fieldVersions: { [key]: 4 } }, "2099-01-01", "theme", { Theme: "Saved" });
+  assert.equal(state.sharedDrafts.meetings["2099-01-01"].theme.Theme, "Saved");
+  assert.equal(state.sharedDrafts.fieldVersions[key], 4);
+  assert.equal(state.sharedDrafts.revision, 3);
+  context.applyConfirmedDraft({ fieldVersions: { [key]: 5 } }, "2099-01-01", "theme", { Theme: "Original" });
+  assert.equal(Object.hasOwn(state.sharedDrafts.meetings["2099-01-01"].theme, "Theme"), false);
+});
 
 function draftService() {
   const properties = new Map();

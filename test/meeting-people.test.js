@@ -22,6 +22,29 @@ test("tentative names preserve identity and never count as confirmed", () => {
   assert.equal(c.assignmentName("◷ Jin"), "Jin");
 });
 
+test("manual names save as confirmed unless tentative is explicitly enabled after typing", () => {
+  const c = client();
+  let pressed = 'false';
+  const toggle = { getAttribute: () => pressed, setAttribute: (_, value) => { pressed = value; } };
+  c.document = { querySelector: () => toggle };
+  c.CSS = { escape: value => value };
+  for (const label of ['Timer', 'Speaker 1', 'Evaluator 2']) {
+    const input = { value: 'Jin', dataset: { editField: label } };
+    pressed = 'false';
+    assert.equal(c.assignmentInputValue(input), 'Jin', 'new manual assignments default to confirmed');
+    pressed = 'true';
+    assert.equal(c.assignmentInputValue(input), '◷ Jin', 'untouched existing tentative assignments are preserved');
+    input.value = 'Joy';
+    c.resetTentativeAssignment(input);
+    assert.equal(c.assignmentInputValue(input), 'Joy', 'typing a replacement removes the tentative status');
+    pressed = 'true';
+    assert.equal(c.assignmentInputValue(input), '◷ Joy', 'explicit activation after typing restores tentative status');
+    input.value = '';
+    c.resetTentativeAssignment(input);
+    assert.equal(pressed, 'false');
+    assert.equal(c.assignmentInputValue(input), '');
+  }
+});
 test("attendees merge aliases and multiple roles, keep guests without roles, and isolate meeting dates", () => {
   const c = client();
   const rows = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "◷ Jin", "Other"], ["Speaker 1", "Jin", ""], ["Timer", "Shilry", ""], ["Attendees", JSON.stringify([{ name: "Guest", guest: true }, { name: "Shirly", guest: true }]), ""]];
@@ -65,6 +88,16 @@ test("hidden tentative assignees remain reserved when suggesting other roles", (
   assert.ok(items.length > 0);
   assert.ok(items.every(item => item.name !== 'Alice'));
 });
+test("a new attendees row survives shared snapshots and pending local overlays", () => {
+  const c = client();
+  const rows = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "Jin", ""]];
+  c.applySharedDraftsToRows(rows, { meetings: { "2099-01-01": { attendees: { Attendees: '[{"name":"Guest","guest":true}]' } } } });
+  c.applySharedDraftsToRows(rows, { meetings: { "2099-01-08": { attendees: { Attendees: '[{"name":"Next","guest":false}]' } } } });
+  assert.equal(rows.filter(r => r[0] === "Attendees").length, 1);
+  assert.match(rows[2][1], /Guest/);
+  assert.match(rows[2][2], /Next/);
+});
+
 function service() {
   const properties = new Map(), operations = new Map();
   const values = [["Date", "2099-01-01", "2099-01-08"], ["Chairperson", "Jin", "Other"]];
@@ -212,4 +245,30 @@ test("guest suffix round-trips identity, attendance and tentative confirmation",
   assert.equal(c.meetingAttendees(model, model.columns[0]).find(p => p.name === 'Anne').guest, true);
   assert.equal(c.isGuestAssignment('Anne', model, model.columns[0]), true);
   assert.equal(c.isGuestAssignment('Donald', model, model.columns[0]), false);
+});
+
+test("Guest and Member toggles update all matching roles and speeches together", () => {
+  const c = client();
+  c.rows = [['Date','2099-01-01'],['Chairperson','Anne'],['Speaker 1','◷ Anne'],['Evaluator 1','Donald'],['Attendees','']];
+  vm.runInContext('state.model = buildModel(rows, []); state.meetingOffset = 0; state.model.comingMeetingIndex = 0;', c);
+  c.editableValue = (meeting, label) => c.rows.find(row => row[0] === label)?.[meeting.col] || '';
+  let groups;
+  c.savePeopleUpdateGroups = value => { groups = value; };
+  c.updateAttendee('Anne', 'guest');
+  assert.equal(groups.roles.Chairperson, 'Anne (G)');
+  assert.equal(groups.speeches['Speaker 1'], '◷ Anne (G)');
+  assert.equal(groups.speeches['Evaluator 1'], undefined);
+  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, true);
+  c.rows[1][1] = 'Anne (G)';
+  c.rows[2][1] = '◷ Anne (G)';
+  c.rows[4][1] = groups.attendees.Attendees;
+  vm.runInContext('state.model = buildModel(rows, []); state.model.comingMeetingIndex = 0;', c);
+  c.updateAttendee('Anne', 'guest');
+  assert.equal(groups.roles.Chairperson, 'Anne');
+  assert.equal(groups.speeches['Speaker 1'], '◷ Anne');
+  assert.equal(JSON.parse(groups.attendees.Attendees)[0].guest, false);
+  c.document = {querySelector: () => ({getAttribute: () => 'false'})};
+  c.CSS = {escape: value => value};
+  assert.equal(c.assignmentInputValue({value:'Anne', dataset:{editField:'Timer'}}), 'Anne (G)');
+  assert.equal(c.assignmentInputValue({value:'Donald', dataset:{editField:'Timer'}}), 'Donald');
 });
