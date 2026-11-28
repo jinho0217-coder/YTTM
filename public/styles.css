@@ -853,7 +853,6 @@ footer p { text-align: right; }
 .library-booking-status[data-status="failed"] .library-mark-failed,
 .library-booking-status[data-status="needed"] .library-mark-unknown,
 .library-booking-status[data-status="unknown"] .library-mark-unknown { display: inline; }
-.library-settings-icon { margin-right: auto; padding-inline: 8px; }
 .library-dialog { width: min(100% - 28px, 510px); }
 .library-dialog [hidden] { display: none; }
 .library-dialog .eyebrow { margin: 0 0 4px; }

@@ -109,9 +109,9 @@ begin
  end loop;
  if p_writes is not null and jsonb_array_length(p_writes) > 0 then
   with rebuilt as (
-    select s.snapshot_rows, s.snapshot_csv
+    select snapshot.snapshot_rows, snapshot.snapshot_csv
     from public.yttm_sheet_snapshots t
-    cross join lateral public.yttm_approved_roles_snapshot(t.rows) as s
+    cross join lateral public.yttm_approved_roles_snapshot(t.rows) as snapshot
     where t.sheet_name = '26_Roles'
   )
   update public.yttm_sheet_snapshots t

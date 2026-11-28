@@ -661,15 +661,18 @@ const ROLE_AGENDA_DUTIES = {
   ],
 };
 
+function roleDutiesHtml(role) {
+  const duties = ROLE_AGENDA_DUTIES[role] || [["Agenda", "Support the meeting according to the Toastmaster's instructions."]];
+  return `<ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
+}
+
 function showRoleDetails(assignment) {
   configureDetailsEditor();
-  const duties = ROLE_AGENDA_DUTIES[assignment.role] || [["Agenda", "Support the meeting according to the Toastmaster's instructions."]];
   setText("agendaDialogEyebrow", "ROLE RESPONSIBILITIES");
   setText("agendaDialogTitle", assignment.role);
   document.getElementById("agendaDialogDetails").innerHTML = `
     <div class="agenda-dialog-owner-row"><p class="agenda-dialog-owner">Assigned to · <strong>${isTentative(assignment.rawValue) ? "◷ " : ""}${escapeHtml(assignment.member)}${guestRoleIcon(assignment.rawValue)}</strong></p><span data-inline-edit-slot></span></div>
-    <ul class="role-duty-list">${duties.map(([time, duty]) => `<li><time>${escapeHtml(time)}</time><span>${escapeHtml(duty)}</span></li>`).join("")}</ul>`;
-  configureDetailsEditor("roles", assignment.role);
+    ${roleDutiesHtml(assignment.role)}`;
   document.getElementById("agendaDetailsDialog").showModal();
 }
 
@@ -785,15 +788,6 @@ function initializeLibrarySettings() {
       pending = false;
     }
   }
-  get("requestLibraryBooking").onclick = () => {
-    if (pending) return;
-    bookingDate.setCustomValidity("");
-    bookingDate.min = sheetDateValue(new Date());
-    const date = new Date(bookingDate.min + "T00:00:00Z");
-    date.setUTCDate(date.getUTCDate() + (7 - date.getUTCDay()) % 7);
-    bookingDate.value = date.toISOString().slice(0, 10);
-    dialog.showModal();
-  };
   get("closeLibrarySettings").onclick = () => dialog.close();
   dialog.addEventListener("close", () => {
     accessKey = "";
@@ -890,6 +884,7 @@ function openMeetingEditor(section, field = "", speechSlot = null, originItem = 
   if (section === "roles") {
     const fields = field && ROLE_EDIT_FIELDS.includes(field) ? [field] : ROLE_EDIT_FIELDS;
     content = fields.map(label => editFieldHtml(meeting, label)).join("");
+    if (field && ROLE_EDIT_FIELDS.includes(field)) content += roleDutiesHtml(field);
   }
   if (section === "awards") {
     const fields = field && AWARD_EDIT_FIELDS.includes(field) ? [field] : AWARD_EDIT_FIELDS;
@@ -1505,8 +1500,18 @@ function renderThisWeek(model) {
   assignmentContainer.innerHTML = assignments.length ? assignments.map((item, index) => `<div class="assignment-wrap"><button type="button" class="assignment ${item.pending ? "pending" : ""} ${isTentative(item.rawValue) ? "tentative" : ""}" data-assignment-index="${index}" aria-haspopup="dialog"><span>${escapeHtml(item.role)}</span><strong>${escapeHtml(item.member)}${guestRoleIcon(item.rawValue)}</strong></button>${tentativeIcon(item.sourceLabel, item.rawValue)}</div>`).join("") : `<div class="empty-state">No role assignments are available yet.</div>`;
   assignmentContainer.querySelectorAll("[data-assignment-index]").forEach(button => {
     const assignment = assignments[Number(button.dataset.assignmentIndex)];
-    button.addEventListener("click", () => showRoleDetails(assignment));
-    addMobileLongPress(button, () => openMeetingEditor("roles", assignment.role));
+    if (!canEditActiveMeeting() || !ROLE_EDIT_FIELDS.includes(assignment.role)) {
+      button.addEventListener("click", () => showRoleDetails(assignment));
+      return;
+    }
+    const editAssignment = () => openMeetingEditor("roles", assignment.role);
+    button.title = "Double-click to edit";
+    button.addEventListener("click", event => {
+      if (event.detail === 0 || (event.pointerType && event.pointerType !== "mouse")) editAssignment();
+    });
+    button.addEventListener("dblclick", event => {
+      if (!event.pointerType || event.pointerType === "mouse") editAssignment();
+    });
   });
   renderCompactAgenda(model, meeting);
 
