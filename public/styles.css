@@ -179,6 +179,10 @@ main { min-height: 80vh; }
 .status-banner.error { color: #fff; background: var(--red); }
 .status-banner.warning { display: block; color: #5c3a00; background: #ffd98a; font-weight: 800; }
 .status-banner.ready { display: none; }
+.sheet-differences { padding: 10px 24px; background: #fff4d9; color: #5c3a00; font-size: 13px; }
+.sheet-differences summary { width: fit-content; cursor: pointer; font-weight: 700; }
+.sheet-differences ul { margin: 8px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
+.sheet-differences li + li { margin-top: 4px; }
 .local-save-panel { margin: 12px 0; padding: 14px 20px; color: #214f69; background: #edf7fc; border: 1px solid #bfdeed; border-radius: 10px; font-size: 13px; }
 .local-save-panel[hidden], .local-save-panel [hidden] { display: none; }
 .local-save-panel p { margin: 0 0 8px; }

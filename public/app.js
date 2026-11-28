@@ -166,6 +166,83 @@ async function fetchPublicSheets() {
   };
 }
 
+async function fetchSupabaseSnapshots() {
+  const { snapshotsEndpoint, publishableKey } = window.YTTM_CONFIG;
+  if (!snapshotsEndpoint || !publishableKey) throw new Error("Supabase snapshots are not configured.");
+  const response = await fetch(snapshotsEndpoint, {
+    headers: { apikey: publishableKey },
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) throw new Error(`Supabase returned ${response.status}`);
+  const snapshots = await response.json();
+  const roles = snapshots.find(sheet => sheet.sheet_name === "26_Roles");
+  const agenda = snapshots.find(sheet => sheet.sheet_name === "26_Agenda");
+  if (!roles?.csv || !agenda?.csv || !Number.isFinite(Date.parse(roles.synced_at)) ||
+      roles.synced_at !== agenda.synced_at || parseCsv(roles.csv).length < 10) {
+    throw new Error("Supabase returned incomplete snapshots.");
+  }
+  return { rolesCsv: roles.csv, agendaCsv: agenda.csv, fetchedAt: roles.synced_at, source: SHEET_SOURCE, provider: "Supabase" };
+}
+
+function dashboardSheetDifferences(snapshot, live) {
+  function roleCells(csv) {
+    const [header, ...rows] = parseCsv(csv);
+    const values = new Map();
+    header?.forEach((date, col) => {
+      const parsed = parseDate(date);
+      if (!col || !parsed) return;
+      const day = formatDate(parsed, { year: "numeric" });
+      rows.forEach(row => {
+        const field = clean(row[0]);
+        if (field) values.set(`${day} · ${field}`, clean(row[col]));
+      });
+    });
+    return values;
+  }
+  function agendaCells(csv) {
+    const values = new Map();
+    parseCsv(csv).forEach((row, rowIndex) => row.forEach((value, colIndex) => {
+      if (clean(value)) values.set(`Agenda · Row ${rowIndex + 1}, column ${colIndex + 1}`, clean(value));
+    }));
+    return values;
+  }
+  const compare = (before, after) => [...new Set([...before.keys(), ...after.keys()])].flatMap(label => {
+    const stored = before.get(label) || "";
+    const current = after.get(label) || "";
+    return stored === current ? [] : [{ label, stored, current }];
+  });
+  return [
+    ...compare(roleCells(snapshot.rolesCsv), roleCells(live.rolesCsv)),
+    ...compare(agendaCells(snapshot.agendaCsv), agendaCells(live.agendaCsv)),
+  ];
+}
+
+async function checkSheetDifferences(payload, loadVersion) {
+  try {
+    const live = await fetchPublicSheets();
+    if (loadVersion !== dashboardLoadVersion) return;
+    if (parseCsv(live.rolesCsv).length < 10) throw new Error("26_Roles is empty.");
+    const changes = dashboardSheetDifferences(payload, live);
+    const panel = document.getElementById("sheetDifferences");
+    panel.hidden = !changes.length;
+    setText("sheetDifferencesSummary", `${changes.length} difference${changes.length === 1 ? "" : "s"} in Google Sheets`);
+    const items = changes.slice(0, 20).map(({ label, stored, current }) => {
+      const item = document.createElement("li");
+      item.textContent = `${label}: Supabase “${stored || "—"}” · Google Sheets “${current || "—"}”`;
+      return item;
+    });
+    if (changes.length > items.length) {
+      const item = document.createElement("li");
+      item.textContent = `And ${changes.length - items.length} more.`;
+      items.push(item);
+    }
+    document.getElementById("sheetDifferencesList").replaceChildren(...items);
+  } catch (error) {
+    console.warn("Unable to compare the Google Sheet.", error);
+  }
+}
+
 function setActiveTab(tabName, updateHash = true, scrollToTop = true) {
   const validTabs = new Set(["past", "coming", "next"]);
   const activeTab = validTabs.has(tabName) ? tabName : "coming";
@@ -963,7 +1040,7 @@ async function applySharedDrafts(event) {
     status.textContent = result.syncPending
       ? "Saved to Supabase. Google Sheets sync is still pending."
       : `Applied ${result.updated} and discarded ${result.discarded || 0}. Reloading Google Sheets…`;
-    await loadDashboard(true);
+    await loadDashboard(true, !result.syncPending);
     if (!result.syncPending) setTimeout(() => document.getElementById("adminApplyDialog").close(), 700);
   } catch (error) {
     if (error.result?.code === "DRAFT_CHANGED") {
@@ -1518,7 +1595,7 @@ function render(model, meta) {
   setText("speechCount", model.speeches.length);
   setText("memberCount", model.members.length);
   document.getElementById("sheetLink").href = meta.source;
-  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · Google Sheets`);
+  setText("lastSync", `Last synced ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date(meta.fetchedAt))} · ${meta.provider || "Google Sheets"}`);
   renderFilters(model); renderRoles(model); renderMemberSearch(model); renderSpeeches(model); renderThisWeek(model);
 }
 
@@ -1553,7 +1630,7 @@ function applyConfirmedDraft(result, meetingDate, section, updates) {
   renderSheetPayload(state.sheetPayload);
 }
 
-async function loadDashboard(force = false) {
+async function loadDashboard(force = false, afterSheetApproval = false) {
   const loadVersion = ++dashboardLoadVersion;
   const bookingWriteVersion = libraryBookingWriteVersion;
   loadingLibraryBookings = true;
@@ -1571,12 +1648,24 @@ async function loadDashboard(force = false) {
   const button = document.getElementById("refreshButton");
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
-  banner.className = "status-banner"; banner.textContent = "Loading the latest data from Google Sheets.";
+  banner.className = "status-banner"; banner.textContent = "Loading the meeting schedule.";
+  document.getElementById("sheetDifferences").hidden = true;
+  const sharedDrafts = fetchSharedDrafts().catch(error => {
+    console.warn("Shared drafts are temporarily unavailable.", error);
+    return null;
+  });
   try {
     const isGitHubPages = location.hostname.endsWith(".github.io");
     let payload;
     if (isGitHubPages) {
-      payload = await fetchPublicSheets();
+      if (!afterSheetApproval) {
+        try {
+          payload = await fetchSupabaseSnapshots();
+        } catch (error) {
+          console.warn("Supabase snapshots are temporarily unavailable.", error);
+        }
+      }
+      payload ||= await fetchPublicSheets();
     } else {
       try {
         const endpoint = force ? `/api/sheets?refresh=${Date.now()}` : "/api/sheets";
@@ -1590,24 +1679,25 @@ async function loadDashboard(force = false) {
     }
     const rolesRows = parseCsv(payload.rolesCsv);
     if (rolesRows.length < 10) throw new Error("26_Roles is empty.");
-    let drafts;
-    try {
-      drafts = await fetchSharedDrafts();
-    } catch (draftError) {
-      console.warn("Shared drafts are temporarily unavailable.", draftError);
-      drafts = state.sharedDrafts;
-    }
     if (loadVersion !== dashboardLoadVersion) return;
     captureSheetBaseValues(rolesRows);
     state.sheetPayload = payload;
-    state.sharedDrafts = drafts;
     renderSheetPayload(payload);
     banner.className = "status-banner ready";
     const meeting = state.model.comingMeeting;
+    const provider = payload.provider || "Google Sheets";
     banner.textContent = meeting
-      ? `Updated ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from Google Sheets.`
-      : "Updated the latest data from Google Sheets.";
-    void flushLocalSaves();
+      ? `Loaded ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from ${provider}.`
+      : `Loaded the meeting schedule from ${provider}.`;
+    if (provider === "Supabase") void checkSheetDifferences(payload, loadVersion);
+    void sharedDrafts.then(drafts => {
+      if (loadVersion !== dashboardLoadVersion || !drafts) return;
+      if (Number(drafts.revision || 0) >= Number(state.sharedDrafts.revision || 0)) {
+        state.sharedDrafts = drafts;
+        renderSheetPayload(payload);
+      }
+      void flushLocalSaves();
+    });
     return true;
   } catch (error) {
     if (loadVersion !== dashboardLoadVersion) return;
