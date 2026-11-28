@@ -49,5 +49,39 @@ test("Google Sheet comparison reports altered and cleared cells only", () => {
   assert.equal(differences.length, 2);
   assert.equal(differences[0].stored, "Member 0");
   assert.equal(differences[0].current, "");
+  assert.equal(differences[0].meetingDate, "2026-11-29");
+  assert.equal(differences[0].field, "Role 0");
   assert.equal(differences[1].current, "Replacement");
+});
+
+test("reconciliation accepts either current source and rejects a stale comparison", () => {
+  const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
+  const meetingDate = "2026-12-06";
+  let committed;
+  const context = vm.createContext({
+    mockedContext: {
+      columns: [{ date: meetingDate, column: 2 }],
+      rowByLabel: new Map([["Chairperson", 4]]),
+      sheet: { getRange: () => ({ getValue: () => "William", getFormula: () => "" }) },
+    },
+    mockWrite(drafts, request, writes) { committed = writes[0]; return { revision: 2 }; },
+  });
+  vm.runInContext(backend, context);
+  vm.runInContext(`
+    requirePin = () => {};
+    primaryConfigured = () => true;
+    sheetContext = () => mockedContext;
+    readDrafts = () => ({ meetings: {} });
+    primaryRequest = path => path.startsWith("yttm_meetings?") ? [{ fields: { Chairperson: "" } }] : [];
+    syncPrimarySheetJob = () => {};
+    writeDrafts = mockWrite;
+    operationResponse = (request, result) => result;
+  `, context);
+  const choice = { meetingDate, field: "Chairperson", stored: "", current: "William" };
+  assert.equal(context.reconcileSheetDifferences({ choices: [{ ...choice, source: "supabase" }] }).ok, true);
+  assert.equal(committed.value, "");
+  assert.equal(committed.previousValue, "William");
+  assert.equal(context.reconcileSheetDifferences({ choices: [{ ...choice, source: "sheet" }] }).ok, true);
+  assert.equal(committed.value, "William");
+  assert.throws(() => context.reconcileSheetDifferences({ choices: [{ ...choice, current: "Other", source: "sheet" }] }), /changed after comparison/);
 });

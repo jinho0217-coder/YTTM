@@ -461,20 +461,71 @@ function doGet(event) {
   }
 }
 
+function reconcileSheetDifferences(request) {
+  requirePin(request.pin);
+  if (!primaryConfigured()) throw new Error("Supabase storage is not configured.");
+  if (!Array.isArray(request.choices) || !request.choices.length || request.choices.length > 20) {
+    throw new Error("Select between 1 and 20 values to approve.");
+  }
+  const context = sheetContext();
+  const drafts = readDrafts();
+  const seen = new Set();
+  const meetings = new Map();
+  const writes = request.choices.map(({ meetingDate, field, source, stored, current }) => {
+    const key = `${meetingDate}|${field}`;
+    const section = Object.keys(EDITABLE_FIELDS).find(name => EDITABLE_FIELDS[name].includes(field));
+    const meeting = context.columns.find(column => column.date === meetingDate);
+    const row = context.rowByLabel.get(field);
+    if (seen.has(key) || !section || !meeting || !row || !["supabase", "sheet"].includes(source)) {
+      throw new Error("The selected difference is no longer available.");
+    }
+    seen.add(key);
+    if (Object.values(drafts.meetings[meetingDate] || {}).some(values => Object.hasOwn(values, field))) {
+      throw new Error("A shared draft exists for this field. Review that draft before reconciling it.");
+    }
+    if (!meetings.has(meetingDate)) {
+      const [record] = primaryRequest("yttm_meetings?select=fields&meeting_date=eq." + encodeURIComponent(meetingDate));
+      if (!record) throw new Error("The meeting was not found in Supabase.");
+      meetings.set(meetingDate, record.fields);
+    }
+    const dbValue = String(meetings.get(meetingDate)[field] ?? "").trim();
+    const range = context.sheet.getRange(row, meeting.column);
+    const sheetValue = String(range.getValue() ?? "").trim();
+    if (stored !== dbValue || current !== sheetValue) {
+      throw new Error("A source value changed after comparison. Refresh and review it again.");
+    }
+    if (source === "supabase" && range.getFormula() && dbValue !== sheetValue) {
+      throw new Error("This Google Sheet cell contains a formula. Review it directly in the sheet.");
+    }
+    const value = validatedUpdates(section, { [field]: source === "supabase" ? dbValue : sheetValue })[field];
+    return { meetingDate, section, label: field, previousValue: sheetValue, value };
+  });
+  const saved = writeDrafts(drafts, request, writes);
+  let syncPending = true;
+  try {
+    syncPrimarySheetJob();
+    syncPending = primaryRequest("yttm_sheet_outbox?state=neq.done&select=id&limit=1").length > 0;
+  } catch (error) {
+    console.error("Sheet reconciliation queued for retry.", error);
+  }
+  return operationResponse(request, { ok: true, applied: true, syncPending, revision: saved.revision, updated: writes.length });
+}
+
 function doPost(event) {
   const lock = LockService.getScriptLock();
   let request = {};
   try {
     lock.waitLock(10000);
     request = JSON.parse(event?.postData?.contents || "{}");
-    if (primaryConfigured() && ["saveDraft", "applyDrafts"].includes(request.action) &&
+    if (primaryConfigured() && ["saveDraft", "applyDrafts", "reconcileSheet"].includes(request.action) &&
         /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {
       const [receipt] = primaryRequest("yttm_save_receipts?request_id=eq." + request.requestId + "&select=result");
       if (receipt) {
-        if (request.action === "applyDrafts") requirePin(request.pin);
+        if (request.action !== "saveDraft") requirePin(request.pin);
         return operationResponse(request, { ...receipt.result, draft: request.action === "saveDraft", drafts: readDrafts() });
       }
     }
+    if (request.action === "reconcileSheet") return reconcileSheetDifferences(request);
     // Reloads and retries reuse the same ID: acknowledge an already committed
     // draft without writing it twice or creating a false version conflict.
     if (request.action === "saveDraft" && /^[A-Za-z0-9_-]{8,80}$/.test(String(request.requestId || ""))) {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261128-supabase-first" />
+    <link rel="stylesheet" href="./styles.css?v=20261128-sheet-choices" />
   </head>
   <body>
     <div class="page-shell">
@@ -47,10 +47,6 @@
         </section>
 
         <div id="statusBanner" class="status-banner" role="status">Loading the meeting schedule.</div>
-        <details id="sheetDifferences" class="sheet-differences" hidden>
-          <summary id="sheetDifferencesSummary"></summary>
-          <ul id="sheetDifferencesList"></ul>
-        </details>
         <section id="localSavePanel" class="local-save-panel" aria-live="polite" hidden>
           <p id="localSaveMessage"></p>
           <details><summary>Pending edits on this device</summary><pre id="localSaveValues"></pre></details>
@@ -220,11 +216,16 @@
           <summary id="adminApplyCompact">Choose changes to apply</summary>
           <div id="adminApplyList" class="admin-apply-list"></div>
         </details>
-        <label class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
+        <details id="sheetDifferences" class="sheet-differences" hidden>
+          <summary id="sheetDifferencesSummary"></summary>
+          <ul id="sheetDifferencesList"></ul>
+        </details>
+        <label id="adminApprovalControls" class="admin-pin-field">Administrator PIN<input id="adminApplyPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
         <p id="adminApplyStatus" class="meeting-edit-status" role="status"></p>
         <div class="meeting-edit-actions admin-actions">
           <button type="button" id="openChangePinDialog" class="secondary-button">Change PIN</button>
           <button type="submit" id="confirmApplySheets" class="primary-button">Apply changes</button>
+          <button type="button" id="confirmSheetChoices" class="primary-button sheet-choice-apply" title="Approve selected values" aria-label="Approve selected values" hidden disabled>✓</button>
         </div>
       </form>
     </dialog>
@@ -384,6 +385,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261128-supabase-first" defer></script>
+    <script src="./app.js?v=20261128-sheet-choices" defer></script>
   </body>
 </html>

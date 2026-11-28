@@ -143,10 +143,12 @@ a { color: inherit; }
 .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .draft-sync-badge { padding: 7px 10px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .03em; white-space: nowrap; }
 .draft-sync-badge.synced { color: #bce8d6; background: rgba(20,115,79,.26); }
+.draft-sync-badge.different { color: #c5e5ff; background: rgba(50,132,190,.22); }
 .draft-sync-badge.pending { color: #ffe2a2; background: rgba(217,170,69,.2); }
 .apply-sheets-button { min-height: 36px; padding: 8px 13px; color: rgba(255,255,255,.55); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.15); border-radius: 999px; font-size: 11px; font-weight: 800; cursor: default; }
 .apply-sheets-button.pending { color: #17242b; background: #edc15e; border-color: #edc15e; cursor: pointer; box-shadow: 0 0 0 3px rgba(237,193,94,.15); }
 .apply-sheets-button.pending:hover { background: #f5ce77; }
+.apply-sheets-button.different:not(.pending) { color: #d9efff; border-color: #85b6d7; cursor: pointer; }
 .apply-sheets-button:disabled { opacity: 1; }
 .admin-settings-button { min-height: 36px; padding: 8px 12px; color: var(--white); background: transparent; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; font-size: 11px; font-weight: 800; cursor: pointer; }
 .admin-settings-button:hover { background: rgba(255,255,255,.1); }
@@ -179,10 +181,16 @@ main { min-height: 80vh; }
 .status-banner.error { color: #fff; background: var(--red); }
 .status-banner.warning { display: block; color: #5c3a00; background: #ffd98a; font-weight: 800; }
 .status-banner.ready { display: none; }
-.sheet-differences { padding: 10px 24px; background: #fff4d9; color: #5c3a00; font-size: 13px; }
+.sheet-differences { margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .sheet-differences summary { width: fit-content; cursor: pointer; font-weight: 700; }
-.sheet-differences ul { margin: 8px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
-.sheet-differences li + li { margin-top: 4px; }
+.sheet-differences ul { margin: 8px 0 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
+.sheet-differences li + li { margin-top: 8px; }
+.sheet-choice-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.sheet-choice { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.sheet-choice:has(input) { cursor: pointer; }
+.sheet-choice:has(input:checked) { border-color: var(--blue); background: #eaf4ff; }
+.sheet-choice-icon { color: var(--blue); font-size: 17px; font-weight: 800; line-height: 1; }
+.admin-dialog [hidden] { display: none; }
 .local-save-panel { margin: 12px 0; padding: 14px 20px; color: #214f69; background: #edf7fc; border: 1px solid #bfdeed; border-radius: 10px; font-size: 13px; }
 .local-save-panel[hidden], .local-save-panel [hidden] { display: none; }
 .local-save-panel p { margin: 0 0 8px; }
@@ -801,6 +809,7 @@ footer p { text-align: right; }
   .topbar-actions .apply-sheets-button { position: relative; flex: 0 0 40px; width: 40px; min-width: 40px; max-width: 40px; min-height: 40px; padding: 8px; overflow: visible; border-radius: 50%; font-size: 0; }
   .topbar-actions .apply-sheets-button::before { content: "⇅"; display: block; font-size: 23px; line-height: 1; }
   .topbar-actions .apply-sheets-button.pending::after { content: ""; position: absolute; top: -1px; right: -1px; width: 8px; height: 8px; border: 2px solid var(--ink); border-radius: 50%; background: var(--red-bright); }
+  .topbar-actions .apply-sheets-button.different::after { content: attr(data-differences); position: absolute; top: -4px; right: -5px; width: auto; min-width: 16px; height: 16px; padding: 0 2px; border: 1px solid var(--ink); border-radius: 10px; background: #bde3ff; color: #17242b; font-size: 10px; line-height: 14px; }
   .admin-settings-button, .refresh-button { flex: 0 0 40px; width: 40px; min-width: 40px; min-height: 40px; padding: 8px; font-size: 0; }
   .admin-settings-button span { font-size: 17px; }
   .refresh-button span { font-size: 19px; }

@@ -1,5 +1,6 @@
 const state = { model: null, member: "all", role: "all", meetingView: "coming", meetingOffset: 0, sharedDrafts: { revision: 0, updatedAt: "", meetings: {}, locks: {}, fieldVersions: {} }, sheetBaseValues: {} };
 const SHEET_ID = "1arhgy3QSwHxyM9gBy6nXdw76N-94R53kf0ogV4Nq2lA";
+let sheetDifferences = [];
 const SHEET_SOURCE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=1852116681`;
 const WRITE_ENDPOINT = clean(window.YTTM_CONFIG?.writeEndpoint);
 const LIBRARY_ENDPOINT = clean(window.YTTM_CONFIG?.libraryEndpoint);
@@ -91,13 +92,18 @@ function renderDraftSyncState() {
   const badge = document.getElementById("draftSyncBadge");
   const button = document.getElementById("applySheetsButton");
   const pending = entries.length > 0;
-  badge.className = `draft-sync-badge ${pending ? "pending" : "synced"}`;
-  badge.textContent = pending ? `Shared draft pending · ${entries.length}` : "Google Sheet synced";
+  const differenceCount = sheetDifferences.length;
+  const differenceLabel = `${differenceCount} sheet difference${differenceCount === 1 ? "" : "s"}`;
+  badge.className = `draft-sync-badge ${pending ? "pending" : differenceCount ? "different" : "synced"}`;
+  badge.textContent = pending ? `Shared draft pending · ${entries.length}` : differenceCount ? differenceLabel : "Google Sheet synced";
   button.classList.toggle("pending", pending);
-  button.disabled = !pending;
-  button.textContent = pending ? `Apply ${entries.length} change${entries.length === 1 ? "" : "s"}` : "Google Sheet up to date";
+  button.classList.toggle("different", differenceCount > 0);
+  button.dataset.differences = differenceCount ? String(differenceCount) : "";
+  button.disabled = !pending && !differenceCount;
+  button.textContent = pending ? `Apply ${entries.length} change${entries.length === 1 ? "" : "s"}` : differenceCount ? differenceLabel : "Google Sheet up to date";
   renderLocalSaveState();
-  button.title = button.textContent;
+  button.title = pending && differenceCount ? `${button.textContent} · ${differenceLabel}` : button.textContent;
+  button.setAttribute("aria-label", button.title);
 }
 
 function applySharedDraftsToRows(rolesRows, drafts) {
@@ -186,6 +192,7 @@ async function fetchSupabaseSnapshots() {
 }
 
 function dashboardSheetDifferences(snapshot, live) {
+  const roleKeys = new Map();
   function roleCells(csv) {
     const [header, ...rows] = parseCsv(csv);
     const values = new Map();
@@ -195,7 +202,11 @@ function dashboardSheetDifferences(snapshot, live) {
       const day = formatDate(parsed, { year: "numeric" });
       rows.forEach(row => {
         const field = clean(row[0]);
-        if (field) values.set(`${day} · ${field}`, clean(row[col]));
+        if (field) {
+          const label = `${day} · ${field}`;
+          values.set(label, clean(row[col]));
+          roleKeys.set(label, { meetingDate: sheetDateValue(parsed), field });
+        }
       });
     });
     return values;
@@ -210,12 +221,65 @@ function dashboardSheetDifferences(snapshot, live) {
   const compare = (before, after) => [...new Set([...before.keys(), ...after.keys()])].flatMap(label => {
     const stored = before.get(label) || "";
     const current = after.get(label) || "";
-    return stored === current ? [] : [{ label, stored, current }];
+    return stored === current ? [] : [{ label, stored, current, ...roleKeys.get(label) }];
   });
   return [
     ...compare(roleCells(snapshot.rolesCsv), roleCells(live.rolesCsv)),
     ...compare(agendaCells(snapshot.agendaCsv), agendaCells(live.agendaCsv)),
   ];
+}
+
+function isReconciledField(field) {
+  return [...THEME_EDIT_FIELDS, ...SPECIAL_EDIT_FIELDS, ...ROLE_EDIT_FIELDS, ...AWARD_EDIT_FIELDS, "Attendees"].includes(field) ||
+    /^(Speaker|Project|Title|Time|Evaluator) [1-4]$/.test(field || "");
+}
+
+function renderSheetChoices() {
+  const choices = document.getElementById("confirmSheetChoices");
+  const list = document.getElementById("sheetDifferencesList");
+  list.innerHTML = sheetDifferences.slice(0, 20).map(({ label, stored, current, field }, index) => {
+    const choose = isReconciledField(field);
+    const option = (source, value, icon, hint) => `<label class="sheet-choice" title="${hint}">
+      ${choose ? `<input type="radio" name="sheet-choice-${index}" data-sheet-choice="${index}" value="${source}" aria-label="${hint}">` : ""}
+      <span class="sheet-choice-icon" aria-hidden="true">${icon}</span>
+      <span class="sheet-choice-value">${escapeHtml(value || "—")}</span>
+    </label>`;
+    return `<li><strong>${escapeHtml(label)}</strong><div class="sheet-choice-options">
+      ${option("supabase", stored, "◇", choose ? "Keep Supabase value" : "Supabase value")}
+      ${option("sheet", current, "▦", choose ? "Use Google Sheets value" : "Google Sheets value")}
+    </div></li>`;
+  }).join("");
+  if (sheetDifferences.length > 20) list.insertAdjacentHTML("beforeend", `<li>+${sheetDifferences.length - 20} more</li>`);
+  choices.hidden = !sheetDifferences.slice(0, 20).some(item => isReconciledField(item.field));
+  choices.disabled = true;
+}
+
+async function approveSheetChoices() {
+  if (localSaves.length) return;
+  const choices = [...document.querySelectorAll("#sheetDifferencesList [data-sheet-choice]:checked")]
+    .map(input => ({ ...sheetDifferences[Number(input.dataset.sheetChoice)], source: input.value }));
+  if (!choices.length) return;
+  const pin = document.getElementById("adminApplyPin");
+  if (!pin.reportValidity()) return;
+  const button = document.getElementById("confirmSheetChoices");
+  button.disabled = true;
+  const status = document.getElementById("adminApplyStatus");
+  status.className = "meeting-edit-status";
+  status.textContent = "Approving…";
+  try {
+    const result = await apiRequest({ action: "reconcileSheet", pin: pin.value, choices });
+    status.textContent = result.syncPending ? "Sheet sync pending." : "Approved.";
+    status.className = `meeting-edit-status ${result.syncPending ? "warning" : "success"}`;
+    if (!result.syncPending) {
+      await loadDashboard(true, true);
+      document.getElementById("adminApplyDialog").close();
+    }
+  } catch (error) {
+    status.className = "meeting-edit-status error";
+    status.textContent = error.message;
+  } finally {
+    button.disabled = !document.querySelector("#sheetDifferencesList [data-sheet-choice]:checked");
+  }
 }
 
 async function checkSheetDifferences(payload, loadVersion) {
@@ -224,20 +288,12 @@ async function checkSheetDifferences(payload, loadVersion) {
     if (loadVersion !== dashboardLoadVersion) return;
     if (parseCsv(live.rolesCsv).length < 10) throw new Error("26_Roles is empty.");
     const changes = dashboardSheetDifferences(payload, live);
+    sheetDifferences = changes;
     const panel = document.getElementById("sheetDifferences");
     panel.hidden = !changes.length;
     setText("sheetDifferencesSummary", `${changes.length} difference${changes.length === 1 ? "" : "s"} in Google Sheets`);
-    const items = changes.slice(0, 20).map(({ label, stored, current }) => {
-      const item = document.createElement("li");
-      item.textContent = `${label}: Supabase “${stored || "—"}” · Google Sheets “${current || "—"}”`;
-      return item;
-    });
-    if (changes.length > items.length) {
-      const item = document.createElement("li");
-      item.textContent = `And ${changes.length - items.length} more.`;
-      items.push(item);
-    }
-    document.getElementById("sheetDifferencesList").replaceChildren(...items);
+    renderSheetChoices();
+    renderDraftSyncState();
   } catch (error) {
     console.warn("Unable to compare the Google Sheet.", error);
   }
@@ -962,8 +1018,23 @@ async function saveMeetingEditor(event) {
 function openAdminApplyDialog() {
   if (localSaves.length) return;
   const entries = sharedDraftEntries();
-  if (!entries.length) return;
+  if (!entries.length && !sheetDifferences.length) return;
   state.adminApplyEntries = entries;
+  const hasDrafts = entries.length > 0;
+  document.getElementById("adminApplyDetails").hidden = !hasDrafts;
+  renderSheetChoices();
+  document.getElementById("adminApprovalControls").hidden = !hasDrafts && document.getElementById("confirmSheetChoices").hidden;
+  document.getElementById("confirmApplySheets").hidden = !hasDrafts;
+  document.getElementById("adminApplyPin").value = "";
+  setText("adminApplyStatus", "");
+  document.getElementById("sheetDifferences").open = !hasDrafts;
+  if (!hasDrafts) {
+    setText("adminApplyTitle", "Google Sheet comparison");
+    setText("adminApplySummary", "");
+    document.getElementById("adminApplyDialog").showModal();
+    return;
+  }
+  setText("adminApplyTitle", "Apply shared draft");
   const meetings = new Set(entries.map(entry => entry.meetingDate)).size;
   setText("adminApplySummary", `${entries.length} shared change${entries.length === 1 ? "" : "s"} across ${meetings} meeting${meetings === 1 ? "" : "s"} will be written to Google Sheets.`);
   const uniqueLabels = [...new Set(entries.map(entry => entry.label))];
@@ -1010,7 +1081,7 @@ function updateAdminApplySelection() {
 
 async function applySharedDrafts(event) {
   event.preventDefault();
-  if (localSaves.length) return;
+  if (localSaves.length || !state.adminApplyEntries?.length) return;
   const pin = document.getElementById("adminApplyPin").value;
   const status = document.getElementById("adminApplyStatus");
   const button = document.getElementById("confirmApplySheets");
@@ -1649,7 +1720,6 @@ async function loadDashboard(force = false, afterSheetApproval = false) {
   const banner = document.getElementById("statusBanner");
   button.classList.add("loading"); button.disabled = true;
   banner.className = "status-banner"; banner.textContent = "Loading the meeting schedule.";
-  document.getElementById("sheetDifferences").hidden = true;
   const sharedDrafts = fetchSharedDrafts().catch(error => {
     console.warn("Shared drafts are temporarily unavailable.", error);
     return null;
@@ -1686,6 +1756,11 @@ async function loadDashboard(force = false, afterSheetApproval = false) {
     banner.className = "status-banner ready";
     const meeting = state.model.comingMeeting;
     const provider = payload.provider || "Google Sheets";
+    if (provider !== "Supabase" && sheetDifferences.length) {
+      sheetDifferences = [];
+      document.getElementById("sheetDifferences").hidden = true;
+      renderDraftSyncState();
+    }
     banner.textContent = meeting
       ? `Loaded ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from ${provider}.`
       : `Loaded the meeting schedule from ${provider}.`;
@@ -1863,6 +1938,10 @@ function openPinSettings() {
   changePinDialog.showModal();
 }
 document.getElementById("applySheetsButton").addEventListener("click", openAdminApplyDialog);
+document.getElementById("confirmSheetChoices").addEventListener("click", approveSheetChoices);
+document.getElementById("sheetDifferencesList").addEventListener("change", () => {
+  document.getElementById("confirmSheetChoices").disabled = !document.querySelector("#sheetDifferencesList [data-sheet-choice]:checked");
+});
 document.getElementById("adminSettingsButton").addEventListener("click", openPinSettings);
 document.getElementById("closeAdminApplyDialog").addEventListener("click", () => adminApplyDialog.close());
 document.getElementById("adminApplyForm").addEventListener("submit", applySharedDrafts);
