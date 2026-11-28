@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Yeongtong Toastmasters 2026 role and speech dashboard" />
     <title>YTTM Role Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20261128-sheet-choices" />
+    <link rel="stylesheet" href="./styles.css?v=20261128-supabase-pins" />
   </head>
   <body>
     <div class="page-shell">
@@ -232,11 +232,12 @@
     <dialog id="changePinDialog" class="admin-dialog" aria-labelledby="changePinTitle">
       <form id="changePinForm" method="dialog">
         <div class="missing-dialog-heading">
-          <div><p>ADMIN</p><h2 id="changePinTitle">관리자 설정</h2></div>
+          <div><p>ADMIN</p><h2 id="changePinTitle">PIN settings</h2></div>
           <button type="button" id="closeChangePinDialog" class="dialog-close" aria-label="Close PIN editor">&times;</button>
         </div>
         <div class="pin-change-fields">
-          <label class="admin-pin-field">Current or master 4-digit PIN<input id="currentAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
+          <label class="admin-pin-field">PIN to change<select id="changePinTarget"><option value="admin">Administrator PIN</option><option value="master">Master PIN</option></select></label>
+          <label class="admin-pin-field"><span id="currentPinLabel">Current administrator or master PIN</span><input id="currentAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required></label>
           <label class="admin-pin-field">New 4-digit PIN<input id="newAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
           <label class="admin-pin-field">Confirm new PIN<input id="confirmAdminPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label>
         </div>
@@ -385,6 +386,6 @@
     <script src="./dialog-motion.js?v=20261027-11" defer></script>
     <script src="./meeting-people.js?v=20261027-11" defer></script>
     <script src="./role-suggestions.js?v=20261027-2" defer></script>
-    <script src="./app.js?v=20261128-sheet-choices" defer></script>
+    <script src="./app.js?v=20261128-supabase-pins" defer></script>
   </body>
 </html>

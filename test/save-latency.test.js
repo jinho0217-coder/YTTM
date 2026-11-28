@@ -42,6 +42,7 @@ function draftService({ writable = false } = {}) {
     ContentService: { createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }), MimeType: { JSON: "json" } },
   });
   vm.runInContext(backend, context);
+  vm.runInContext('requirePin = pin => { if (pin !== "2468") throw new Error("Incorrect PIN."); };', context);
   const save = overrides => context.doPost({ postData: { contents: JSON.stringify({
     action: "saveDraft", meetingDate: "2099-01-01", section: "theme",
     updates: { Theme: "Saved", "Theme Question": "New question" },
@@ -124,7 +125,7 @@ test("approval writes only selected changes and keeps unchecked drafts for later
   const meetingDate = "2099-01-01";
   const saved = service.save();
   const request = {
-    action: "applyDrafts", pin: "1004", draftRevision: saved.revision,
+    action: "applyDrafts", pin: "2468", draftRevision: saved.revision,
     totalDrafts: 2, selectionMode: "explicit",
   };
   const empty = service.post({ ...request, selections: [] });

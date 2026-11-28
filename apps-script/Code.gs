@@ -5,10 +5,6 @@ const TIME_ZONE = "Asia/Seoul";
 const DRAFTS_PROPERTY = "YTTM_SHARED_DRAFTS";
 const DRAFTS_MANIFEST_PROPERTY = DRAFTS_PROPERTY + "_MANIFEST";
 const AUDIT_PROPERTY = "YTTM_CHANGE_AUDIT";
-const PIN_GUARD_PROPERTY = "YTTM_PIN_GUARD";
-const ADMIN_PIN_PROPERTY = "YTTM_ADMIN_PIN";
-const DEFAULT_ADMIN_PIN = "1004";
-const MASTER_RESET_PIN = "1144";
 
 const EDITABLE_FIELDS = {
   attendees: ["Attendees"],
@@ -390,34 +386,9 @@ function requireAllowedMeeting(context, meetingDate) {
   return target;
 }
 
-function adminPin() {
-  return PropertiesService.getScriptProperties().getProperty(ADMIN_PIN_PROPERTY) || DEFAULT_ADMIN_PIN;
-}
-
-function requireCredential(pin, allowMasterReset) {
-  const properties = PropertiesService.getScriptProperties();
-  let guard = { failures: 0, blockedUntil: 0 };
-  try { guard = { ...guard, ...JSON.parse(properties.getProperty(PIN_GUARD_PROPERTY) || "{}") }; } catch (_) {}
-  const now = Date.now();
-  if (Number(guard.blockedUntil || 0) > now) {
-    const seconds = Math.ceil((guard.blockedUntil - now) / 1000);
-    throw new Error(`Too many incorrect PIN attempts. Try again in ${seconds} seconds.`);
-  }
-  const suppliedPin = String(pin || "");
-  const validAdminPin = /^\d{4}$/.test(suppliedPin) && suppliedPin === adminPin();
-  const validMasterPin = allowMasterReset === true && suppliedPin === MASTER_RESET_PIN;
-  if (!validAdminPin && !validMasterPin) {
-    guard.failures = Number(guard.failures || 0) + 1;
-    guard.blockedUntil = guard.failures >= 5 ? now + 5 * 60 * 1000 : 0;
-    if (guard.blockedUntil) guard.failures = 0;
-    properties.setProperty(PIN_GUARD_PROPERTY, JSON.stringify(guard));
-    throw new Error("Incorrect administrator PIN.");
-  }
-  properties.deleteProperty(PIN_GUARD_PROPERTY);
-}
-
 function requirePin(pin) {
-  requireCredential(pin, false);
+  const result = primaryRequest("rpc/yttm_manage_pin", { p_pin: String(pin || ""), p_action: "approve" });
+  if (!result.ok) throw new Error(result.error);
 }
 
 function doGet(event) {
@@ -426,7 +397,8 @@ function doGet(event) {
   if (action === "storageHealth") {
     try {
       const state = primaryRequest("yttm_primary_state?select=revision&limit=1");
-      return webResponse({ ok: Array.isArray(state), storage: "Supabase" }, callback);
+      const pins = primaryRequest("yttm_pin_credentials?select=id&limit=1");
+      return webResponse({ ok: Array.isArray(state), storage: "Supabase", pinsReady: pins[0]?.id === true }, callback);
     } catch (error) {
       return webResponse({ ok: false, storage: "Supabase" }, callback);
     }
@@ -702,11 +674,13 @@ function doPost(event) {
     }
 
     if (request.action === "changePin") {
-      requireCredential(request.currentPin, true);
-      if (!/^\d{4}$/.test(String(request.newPin || ""))) throw new Error("The new PIN must contain exactly 4 digits.");
-      if (String(request.newPin) === MASTER_RESET_PIN) throw new Error("The administrator PIN cannot be the same as the master reset PIN.");
-      PropertiesService.getScriptProperties().setProperty(ADMIN_PIN_PROPERTY, String(request.newPin));
-      return operationResponse(request, { ok: true, pinChanged: true, resetWithMaster: String(request.currentPin) === MASTER_RESET_PIN });
+      const action = request.target === "master" ? "change_master" : "change_admin";
+      const result = primaryRequest("rpc/yttm_manage_pin", {
+        p_pin: String(request.currentPin || ""),
+        p_action: action,
+        p_new_pin: String(request.newPin || ""),
+      });
+      return operationResponse(request, { ...result, pinChanged: result.ok });
     }
 
     throw new Error("Unsupported action.");

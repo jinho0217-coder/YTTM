@@ -1138,6 +1138,8 @@ async function applySharedDrafts(event) {
 
 async function changeAdministratorPin(event) {
   event.preventDefault();
+  const form = event.currentTarget;
+  const target = document.getElementById("changePinTarget").value;
   const currentPin = document.getElementById("currentAdminPin").value;
   const newPin = document.getElementById("newAdminPin").value;
   const confirmPin = document.getElementById("confirmAdminPin").value;
@@ -1153,12 +1155,13 @@ async function changeAdministratorPin(event) {
     return;
   }
   status.className = "meeting-edit-status";
-  status.textContent = "Changing the administrator PIN…";
+  status.textContent = "Changing PIN…";
   try {
-    await apiRequest({ action: "changePin", currentPin, newPin });
+    await apiRequest({ action: "changePin", currentPin, newPin, target });
     status.className = "meeting-edit-status success";
-    status.textContent = "Administrator PIN changed. You can also use the master PIN to reset it if it is lost.";
-    event.currentTarget.reset();
+    status.textContent = target === "master" ? "Master PIN changed." : "Administrator PIN changed.";
+    form.reset();
+    updateCurrentPinLabel();
   } catch (error) {
     status.className = "meeting-edit-status error";
     status.textContent = `Unable to change PIN: ${error.message}`;
@@ -1932,9 +1935,14 @@ setInterval(pollSharedDrafts, 10000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) pollSharedDrafts(); });
 const adminApplyDialog = document.getElementById("adminApplyDialog");
 const changePinDialog = document.getElementById("changePinDialog");
+function updateCurrentPinLabel() {
+  setText("currentPinLabel", document.getElementById("changePinTarget").value === "master"
+    ? "Current master PIN" : "Current administrator or master PIN");
+}
 function openPinSettings() {
   document.getElementById("changePinForm").reset();
-  setText("changePinStatus", "Enter the current PIN, or use the master PIN if the administrator PIN was lost. The new PIN cannot match the master PIN.");
+  updateCurrentPinLabel();
+  setText("changePinStatus", "");
   changePinDialog.showModal();
 }
 document.getElementById("applySheetsButton").addEventListener("click", openAdminApplyDialog);
@@ -1943,6 +1951,7 @@ document.getElementById("sheetDifferencesList").addEventListener("change", () =>
   document.getElementById("confirmSheetChoices").disabled = !document.querySelector("#sheetDifferencesList [data-sheet-choice]:checked");
 });
 document.getElementById("adminSettingsButton").addEventListener("click", openPinSettings);
+document.getElementById("changePinTarget").addEventListener("change", updateCurrentPinLabel);
 document.getElementById("closeAdminApplyDialog").addEventListener("click", () => adminApplyDialog.close());
 document.getElementById("adminApplyForm").addEventListener("submit", applySharedDrafts);
 document.getElementById("adminApplyList").addEventListener("change", event => {

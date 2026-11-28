@@ -92,6 +92,7 @@ function service() {
     ContentService: { createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }), MimeType: { JSON: "json" } },
   });
   vm.runInContext(read("apps-script/Code.gs"), context);
+  vm.runInContext('requirePin = pin => { if (pin !== "2468") throw new Error("Incorrect PIN."); };', context);
   return { context, values, properties, post: body => context.doPost({ postData: { contents: JSON.stringify(body) } }) };
 }
 
@@ -147,7 +148,7 @@ test("attendee drafts wait for administrator approval and create only one row fo
     assert.equal(saved.ok, true);
   }
   assert.equal(s.values.length, 2, "saving a draft cannot modify Sheets");
-  const result = s.post({ action: "applyDrafts", pin: "1004", draftRevision: saved.revision, totalDrafts: 2, selectionMode: "explicit", selections: ["2099-01-01", "2099-01-08"].map(meetingDate => ({ meetingDate, section: "attendees", label: "Attendees" })) });
+  const result = s.post({ action: "applyDrafts", pin: "2468", draftRevision: saved.revision, totalDrafts: 2, selectionMode: "explicit", selections: ["2099-01-01", "2099-01-08"].map(meetingDate => ({ meetingDate, section: "attendees", label: "Attendees" })) });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.updated, 2);
   assert.equal(s.values.length, 3);
