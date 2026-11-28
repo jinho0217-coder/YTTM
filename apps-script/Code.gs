@@ -361,6 +361,18 @@ function fieldKey(meetingDate, section, label) {
   return `${meetingDate}|${section}|${label}`;
 }
 
+function removeApprovedDraftFields(drafts, writes) {
+  writes.forEach(({ meetingDate, section, label }) => {
+    for (const entries of [drafts.meetings, drafts.bases]) {
+      const meeting = entries?.[meetingDate];
+      if (!meeting?.[section]) continue;
+      delete meeting[section][label];
+      if (!Object.keys(meeting[section]).length) delete meeting[section];
+      if (!Object.keys(meeting).length) delete entries[meetingDate];
+    }
+  });
+}
+
 function appendAudit(entries) {
   if (!entries.length) return;
   const properties = PropertiesService.getScriptProperties();
@@ -617,6 +629,10 @@ function doPost(event) {
       }
       Object.entries(drafts.meetings || {}).forEach(([meetingDate, sections]) => {
         Object.entries(sections || {}).forEach(([section, rawUpdates]) => {
+          if (rawUpdates && typeof rawUpdates === "object" && !Array.isArray(rawUpdates) && !Object.keys(rawUpdates).length) {
+            delete sections[section];
+            return;
+          }
           const updates = validatedUpdates(section, rawUpdates);
           Object.keys(updates).forEach(label => {
             const key = fieldKey(meetingDate, section, label);
@@ -633,6 +649,7 @@ function doPost(event) {
             writes.push({ meetingDate, section, label, row, column: target.column, previousValue: currentValue, value: updates[label] });
           });
         });
+        if (sections && !Object.keys(sections).length) delete drafts.meetings[meetingDate];
       });
       if (Number(request.totalDrafts) !== allEntries.length || [...selectedKeys].some(key => !allEntries.some(item => fieldKey(item.meetingDate, item.section, item.label) === key))) {
         return operationResponse(request, { ok: false, code: "DRAFT_CHANGED", error: "The pending change list no longer matches this approval. Reload the page and review it again.", revision: drafts.revision });
@@ -642,10 +659,7 @@ function doPost(event) {
       }
       if (!writes.length) throw new Error("Select at least one pending change to apply.");
       if (primaryConfigured()) {
-        writes.forEach(({ meetingDate, section, label }) => {
-          delete drafts.meetings[meetingDate][section][label];
-          if (drafts.bases?.[meetingDate]?.[section]) delete drafts.bases[meetingDate][section][label];
-        });
+        removeApprovedDraftFields(drafts, writes);
         const saved = writeDrafts(drafts, request, writes);
         let syncPending = true;
         try {
@@ -682,15 +696,7 @@ function doPost(event) {
         SpreadsheetApp.flush();
         throw new Error(`Google Sheets was only partially updated, so the operation was rolled back. ${writeError.message || writeError}`);
       }
-      writes.forEach(({ meetingDate, section, label }) => {
-        for (const entries of [drafts.meetings, drafts.bases]) {
-          const meeting = entries[meetingDate];
-          if (!meeting?.[section]) continue;
-          delete meeting[section][label];
-          if (!Object.keys(meeting[section]).length) delete meeting[section];
-          if (!Object.keys(meeting).length) delete entries[meetingDate];
-        }
-      });
+      removeApprovedDraftFields(drafts, writes);
       const saved = writeDrafts(drafts);
       try {
         appendAudit(writes.map(item => ({ at: new Date().toISOString(), action: request.force === true ? "force-apply" : "apply", meetingDate: item.meetingDate, section: item.section, label: item.label, from: item.previousValue, value: item.value })));

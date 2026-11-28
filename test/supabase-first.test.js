@@ -95,6 +95,44 @@ test("an approved batch routes identical column numbers to their own year's role
   assert.deepEqual([...values], [["26_Roles:2:2", "December"], ["27_Roles:2:2", "January"]]);
 });
 
+test("Supabase approval skips old empty sections and removes the approved field without dropping other drafts", () => {
+  const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
+  const meetingDate = "2026-11-29";
+  const drafts = {
+    revision: 4,
+    meetings: { "2026-12-06": { roles: {} }, [meetingDate]: { speeches: { "Time 3": "5-6-7" }, roles: { Timer: "Member" } } },
+    bases: { [meetingDate]: { speeches: { "Time 3": "" }, roles: { Timer: "" } } },
+  };
+  const sheet = { getRange: () => ({ getValue: () => "" }) };
+  let committed;
+  const context = vm.createContext({
+    drafts,
+    contexts: [{ columns: [{ date: meetingDate, column: 2 }], rowByLabel: new Map([["Time 3", 5]]), sheet }],
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    Utilities: { formatDate: () => "2026-11-28" },
+    commit(draft, request, writes) { committed = writes; return { ...draft, revision: 5 }; },
+  });
+  vm.runInContext(backend, context);
+  vm.runInContext(`
+    primaryConfigured = () => true;
+    primaryRequest = () => [];
+    requirePin = () => {};
+    readDrafts = () => drafts;
+    meetingSheetContexts = () => contexts;
+    syncPrimarySheetJob = () => true;
+    writeDrafts = commit;
+    operationResponse = (request, result) => result;
+  `, context);
+  const request = { action: "applyDrafts", draftRevision: 4, selectionMode: "explicit", totalDrafts: 2,
+    selections: [{ meetingDate, section: "speeches", label: "Time 3" }] };
+  const result = context.doPost({ postData: { contents: JSON.stringify(request) } });
+  assert.equal(result.ok, true);
+  assert.equal(result.remaining, 1);
+  assert.equal(committed[0].value, "5-6-7");
+  assert.deepEqual(drafts.meetings, { [meetingDate]: { roles: { Timer: "Member" } } });
+  assert.deepEqual(drafts.bases, { [meetingDate]: { roles: { Timer: "" } } });
+});
+
 test("live Sheet values replace the initial display and unapproved editable values enter the approval list", async () => {
   const roles = ["Date,2026-11-29", "Chairperson,", ...Array.from({ length: 9 }, (_, i) => `Role ${i},`)].join("\n");
   const live = { rolesCsv: roles.replace("Chairperson,", "Chairperson,William"), agendaCsv: "" };
