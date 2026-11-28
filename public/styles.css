@@ -131,6 +131,16 @@ a { color: inherit; }
 .dashboard-tabs button[aria-current="true"] { color: var(--white); background: var(--red); border-color: var(--red); }
 .dashboard-tabs .meeting-arrow { flex: 0 0 48px; min-width: 48px; color: var(--red); font-size: 18px; }
 .dashboard-tabs .meeting-arrow:disabled { color: var(--muted); opacity: .35; cursor: not-allowed; }
+@media (min-width: 621px) {
+  .dashboard-tabs { align-items: center; }
+  .dashboard-tabs .meeting-arrow {
+    flex-basis: 64px;
+    min-width: 64px;
+    min-height: 48px;
+    padding-inline: 0;
+    font-size: 28px;
+  }
+}
 .special-event-tab { display: inline-flex; align-items: center; min-height: 36px; padding: 8px 14px; color: var(--blue); background: transparent; border: 1px solid rgba(30,114,133,.3); border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
 .special-event-tab:hover { color: var(--blue); background: rgba(30,114,133,.1); }
 .special-event-tab:focus-visible { outline: 3px solid rgba(30,114,133,.26); outline-offset: 3px; }
