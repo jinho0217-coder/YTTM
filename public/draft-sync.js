@@ -124,14 +124,21 @@ async function retryLocalSaves() {
   const conflict = localSaves[0].status === "conflict";
   if (conflict) {
     if (!window.confirm("Another person changed these fields. Send your local edits again using the latest version? This can replace their current values. Your pending edits are listed below.")) return;
-    if (!await loadDashboard(true)) return;
+    const hasTableTopicEdits = localSaves.some(({ payload }) => payload.section === "tableTopics");
+    if (!await loadDashboard(true, hasTableTopicEdits)) return;
     const versions = { ...state.sharedDrafts.fieldVersions };
     localSaves.forEach(({ payload }) => {
       Object.keys(payload.updates).forEach(label => {
         const key = `${payload.meetingDate}|${payload.section}|${label}`;
         payload.fieldVersions[label] = Number(versions[key] || 0);
         versions[key] = payload.fieldVersions[label] + 1;
-        payload.baseValues[label] = state.sheetBaseValues[payload.meetingDate]?.[label] || "";
+        if (payload.section === "tableTopics") {
+          const { names } = tableTopicAgendaSource(state.sheetPayload, payload.meetingDate.slice(0, 4));
+          const index = Number(label.split(" ").at(-1)) - 1;
+          if (names) payload.baseValues[label] = names[index] || "";
+        } else {
+          payload.baseValues[label] = state.sheetBaseValues[payload.meetingDate]?.[label] || "";
+        }
       });
       payload.requestId = newSaveRequestId();
     });

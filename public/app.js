@@ -653,10 +653,12 @@ function tableTopicNamesForMeeting(meetingDate, source, drafts) {
   const sourceDate = clean(source.date).replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, "$3-$1-$2");
   const approved = drafts.tableTopicSpeakers?.[meetingDate];
   const pending = drafts.meetings?.[meetingDate]?.tableTopics;
+  const local = Object.assign({}, ...localSaves.filter(({ payload }) =>
+    payload.section === "tableTopics" && payload.meetingDate === meetingDate).map(({ payload }) => payload.updates));
   const hasSavedMeeting = Object.keys(drafts.tableTopicSpeakers || {}).some(date => date.slice(0, 4) === meetingDate.slice(0, 4));
   return Array.from({ length: 8 }, (_, index) => {
     const label = `Table Topics Speaker ${index + 1}`;
-    return pending?.[label] ?? approved?.[label] ?? (!hasSavedMeeting && sourceDate === meetingDate ? source.names?.[index] : "") ?? "";
+    return local[label] ?? pending?.[label] ?? approved?.[label] ?? (!hasSavedMeeting && sourceDate === meetingDate ? source.names?.[index] : "") ?? "";
   });
 }
 
@@ -679,8 +681,9 @@ function showTableTopicSpeakers(meetingDate) {
   const section = "tableTopics";
   const labels = sheetNames.map((_, index) => `Table Topics Speaker ${index + 1}`);
   const baseValues = Object.fromEntries(labels.map((label, index) => [label, sheetNames[index]]));
-  let previousNames = tableTopicNamesForMeeting(meetingDate, source, drafts);
-  const fieldVersions = Object.fromEntries(labels.map(label => [label, drafts.fieldVersions?.[`${meetingDate}|${section}|${label}`] || 0]));
+  const previousNames = tableTopicNamesForMeeting(meetingDate, source, drafts);
+  const versions = localFieldVersions();
+  const fieldVersions = Object.fromEntries(labels.map(label => [label, versions[`${meetingDate}|${section}|${label}`] || 0]));
   form.querySelector(".table-topic-sheet-location").textContent = `${meetingDate} · ${year.slice(2)}_Agenda!N42:N49`;
   status.insertAdjacentHTML("beforebegin", `<fieldset class="table-topic-speaker-fields">
     <legend class="sr-only">Speaker names</legend>
@@ -688,29 +691,22 @@ function showTableTopicSpeakers(meetingDate) {
     <button type="submit" class="primary-button" ${canEditActiveMeeting() ? "" : "disabled"}>Save speaker names</button>
   </fieldset>`);
   status.textContent = "";
-  const fields = form.querySelector("fieldset");
   const inputs = [...form.querySelectorAll("[data-speaker-name]")];
-  form.onsubmit = async event => {
+  form.onsubmit = event => {
     event.preventDefault();
     const names = inputs.map(input => input.value.trim());
     const updates = Object.fromEntries(labels.flatMap((label, index) => names[index] === previousNames[index] ? [] : [[label, names[index]]]));
     if (!Object.keys(updates).length) return;
-    fields.disabled = true;
-    status.textContent = "Saving speaker names…";
     try {
-      const saved = await apiRequest({ action: "saveDraft", meetingDate, section, updates, baseValues, fieldVersions });
-      if (saved.drafts && Number(saved.drafts.revision) >= Number(state.sharedDrafts.revision || 0)) {
-        applyConfirmedDraft(saved, meetingDate, section, updates);
-      }
-      const currentDrafts = saved.drafts || state.sharedDrafts;
-      Object.keys(updates).forEach(label => { fieldVersions[label] = currentDrafts.fieldVersions?.[`${meetingDate}|${section}|${label}`] || 0; });
-      previousNames = names;
-      status.textContent = "Saved as a shared draft. Google Sheets updates after administrator approval.";
+      enqueueDraftSave({ action: "saveDraft", meetingDate, section, updates, baseValues, fieldVersions });
     } catch (error) {
       status.textContent = error.message;
-    } finally {
-      fields.disabled = false;
+      return;
     }
+    dashboardLoadVersion += 1;
+    document.getElementById("agendaDetailsDialog").close();
+    renderSheetPayload(state.sheetPayload);
+    void flushLocalSaves();
   };
 }
 
@@ -1759,7 +1755,7 @@ function applyConfirmedDraft(result, meetingDate, section, updates) {
   renderSheetPayload(state.sheetPayload);
 }
 
-async function loadDashboard(force = false) {
+async function loadDashboard(force = false, waitForLive = false) {
   const loadVersion = ++dashboardLoadVersion;
   const bookingWriteVersion = libraryBookingWriteVersion;
   loadingLibraryBookings = true;
@@ -1820,8 +1816,9 @@ async function loadDashboard(force = false) {
     banner.textContent = meeting
       ? `Loaded ${formatDate(meeting.date, { year: "numeric" })} ${meeting.meetingNo || ""} from ${provider}.`
       : `Loaded the meeting schedule from ${provider}.`;
-    if (provider === "Supabase" || (!payload.nextYearRolesCsv && WRITE_ENDPOINT)) void loadLiveSheet(payload, loadVersion, provider === "Supabase");
-    void sharedDrafts.then(drafts => {
+    const live = provider === "Supabase" || (!payload.nextYearRolesCsv && WRITE_ENDPOINT)
+      ? loadLiveSheet(payload, loadVersion, provider === "Supabase") : null;
+    const applyDrafts = sharedDrafts.then(drafts => {
       if (loadVersion !== dashboardLoadVersion || !drafts) return;
       if (Number(drafts.revision || 0) >= Number(state.sharedDrafts.revision || 0)) {
         state.sharedDrafts = drafts;
@@ -1829,6 +1826,7 @@ async function loadDashboard(force = false) {
       }
       void flushLocalSaves();
     });
+    if (waitForLive) await Promise.all([live, applyDrafts]);
     return true;
   } catch (error) {
     if (loadVersion !== dashboardLoadVersion) return;

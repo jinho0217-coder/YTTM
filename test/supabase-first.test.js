@@ -131,6 +131,33 @@ test("Table Topics speakers add only attendees not already counted through a rol
   assert.equal(context.meetingAttendees(model, { col: 2 }).length, 0);
 });
 
+test("Table Topics save closes the editor and updates the model while shared sync is pending", () => {
+  const events = [];
+  const inputs = Array.from({ length: 8 }, () => ({ value: "" }));
+  const form = {
+    querySelector: () => ({ insertAdjacentHTML() {} }),
+    querySelectorAll: () => inputs,
+  };
+  const context = dashboard({ events, document: {
+    createElement: () => form,
+    getElementById: id => id === "agendaDetailsDialog"
+      ? { close: () => events.push("closed") } : { appendChild() {} },
+  } });
+  vm.runInContext(`
+    const localSaves = [];
+    state.sheetPayload = { nextYearTableTopicNames: Array(8).fill("") };
+    canEditActiveMeeting = () => true;
+    localFieldVersions = () => ({});
+    enqueueDraftSave = payload => localSaves.push({ payload });
+    renderSheetPayload = () => events.push(tableTopicNamesForMeeting("2027-01-03", {}, state.sharedDrafts)[0]);
+    flushLocalSaves = () => { events.push("syncing"); return new Promise(() => {}); };
+  `, context);
+  context.showTableTopicSpeakers("2027-01-03");
+  inputs[0].value = "New speaker";
+  form.onsubmit({ preventDefault() {} });
+  assert.deepEqual(events, ["closed", "New speaker", "syncing"]);
+});
+
 test("an approved batch routes identical column numbers to their own year's roles tab", () => {
   const backend = fs.readFileSync(path.join(__dirname, "../apps-script/Code.gs"), "utf8");
   const values = new Map();
